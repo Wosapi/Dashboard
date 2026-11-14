@@ -185,10 +185,7 @@ def plot_monthly_target_vs_actual(monthly_df):
     return fig
 
 def plot_quarterly_combined_chart(quarterly_df, q_product_df, quarter_name):
-    """تصميم احترافي مطابق للنموذج المطلوب: دوقات دائري بالمنتصف وأعمدة منتجات الربع تحته"""
     prod_colors = {"Min": COLORS["dark_blue"], "Syn": COLORS["orange"], "DEO": COLORS["teal"], "Fluids": COLORS["navy_blue"]}
-    
-    # تحضير الرسم الدائري المجمع للربع
     labels = q_product_df["Product"].tolist()
     values = q_product_df["Actual"].fillna(0).tolist()
     total_q_actual = sum(values)
@@ -408,14 +405,11 @@ if sheets_dict is not None:
 
             qc1, qc2 = st.columns([1, 1])
             with qc1:
-                # عرض الرسم الدائري المجمع للربع الاحترافي
                 st.plotly_chart(plot_quarterly_combined_chart(q_data_df, q_prod_summary, selected_quarter), use_container_width=True, config={'displayModeBar': False})
             with qc2:
-                # جدول ملخص الربع
                 st.markdown(f"**ملخص أداء الربع {selected_quarter}:**")
                 st.dataframe(q_prod_summary.style.format({"Target": "{:,.2f}", "Actual": "{:,.2f}", "Variance": "{:+,.2f}", "Remaining": "{:,.2f}", "Achievement %": "{:.1f}%"}, na_rep="—"), use_container_width=True)
 
-            # عرض الأعمدة الشهرية الخاصة بالمنتجات تحت الربع (مطابق للنموذج)
             st.markdown(f"**التفصيل الشهري لمنتجات الربع {selected_quarter}:**")
             q_months = q_data_df["Month"].unique().tolist()
             if q_months:
