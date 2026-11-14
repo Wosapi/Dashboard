@@ -15,25 +15,37 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# ---------------------------------------------------------
+# Color system (one source of truth)
+#   Brand      : navy / navy2
+#   Series     : target (slate)  vs  actual (teal)
+#   Status     : green >= 100 | amber 80-99 | red < 80
+#   Products   : 4 clearly distinguishable hues
+# ---------------------------------------------------------
 C = {
-    "navy": "#102D50",
-    "navy2": "#173B63",
-    "teal": "#0FA69E",
-    "orange": "#E99A16",
-    "blue": "#2873D8",
-    "bg": "#F3F7FC",
+    "navy": "#0B2545",
+    "navy2": "#13315C",
+    "teal": "#0E9F8E",
+    "orange": "#F59E0B",
+    "blue": "#38BDF8",
+    "deep": "#1E3A8A",
+    "bg": "#F1F5F9",
     "white": "#FFFFFF",
-    "text": "#142B46",
-    "muted": "#4A5568",
-    "border": "#DCE5EF",
-    "red": "#DC3F43",
-    "gray": "#E7EDF4",
+    "text": "#0F2540",
+    "muted": "#52637A",
+    "border": "#D9E2EC",
+    "red": "#DC2626",
+    "green": "#16A34A",
+    "amber": "#D97706",
+    "gray": "#E2E8F0",
+    "target": "#334E68",
+    "actual": "#0E9F8E",
 }
 
 PRODUCTS = ["Min", "Syn", "DEO", "Fluids"]
 
 PCOLORS = {
-    "Min": C["navy"],
+    "Min": C["deep"],
     "Syn": C["orange"],
     "DEO": C["teal"],
     "Fluids": C["blue"],
@@ -136,9 +148,13 @@ TEXT = {
 # =========================================================
 # 2. CSS DESIGN
 # =========================================================
+# ملاحظة مهمة: تنسيق شريط العنوان الأزرق أصبح يعتمد على
+# st.container(key="hdr_...") بدل :has() حتى لا يتلوّن البانل كاملاً.
+# يتطلب Streamlit >= 1.39
 
 st.markdown(f"""
 <style>
+/* ---------- Base ---------- */
 .stApp {{
     background:{C['bg']};
     color:{C['text']};
@@ -149,16 +165,25 @@ st.markdown(f"""
     padding:1rem 1.25rem 2rem;
 }}
 
-h1,h2,h3,h4 {{
+h1,h2,h3,h4,h5,h6 {{
     color:{C['text']};
 }}
 
+.stApp label,
+.stApp [data-testid="stCaptionContainer"],
+.stApp [data-testid="stWidgetLabel"] p {{
+    color:{C['muted']} !important;
+    font-weight:600;
+}}
+
+/* ---------- Metrics ---------- */
 div[data-testid="stMetric"] {{
-    background:white;
+    background:{C['white']};
     border:1px solid {C['border']};
+    border-inline-start:4px solid {C['teal']};
     border-radius:12px;
     padding:10px 12px;
-    box-shadow:0 2px 8px rgba(16,45,80,.05);
+    box-shadow:0 2px 8px rgba(11,37,69,.06);
     min-height:84px;
 }}
 
@@ -168,21 +193,27 @@ div[data-testid="stMetricLabel"] {{
     font-size:.78rem;
 }}
 
+div[data-testid="stMetricLabel"] p {{
+    white-space:normal !important;
+    overflow:visible !important;
+    text-overflow:clip !important;
+    line-height:1.25;
+}}
+
 div[data-testid="stMetricValue"] {{
     color:{C['navy']};
     font-weight:800;
     font-size:clamp(1.05rem,1.7vw,1.55rem);
 }}
 
+/* ---------- Header ---------- */
 .dashboard-header {{
-    background:linear-gradient(
-        112deg,#0C2747 0%,#173B63 68%,#0E8294 100%
-    );
+    background:linear-gradient(112deg,#0B2545 0%,#13315C 62%,#0E8C8C 100%);
     border-radius:15px;
     padding:18px 24px;
     color:white;
     margin-bottom:15px;
-    box-shadow:0 5px 16px rgba(16,45,80,.14);
+    box-shadow:0 6px 18px rgba(11,37,69,.18);
     display:flex;
     justify-content:space-between;
     align-items:center;
@@ -196,7 +227,7 @@ div[data-testid="stMetricValue"] {{
 }}
 
 .dashboard-header p {{
-    color:#D6E4F1;
+    color:#CFE0F1;
     margin:4px 0 0;
     font-size:.9rem;
 }}
@@ -206,9 +237,9 @@ div[data-testid="stMetricValue"] {{
     font-weight:750;
     white-space:nowrap;
     padding:8px 14px;
-    border:1px solid #ffffff38;
+    border:1px solid #ffffff40;
     border-radius:10px;
-    background:#ffffff14;
+    background:#ffffff18;
 }}
 
 .section-heading {{
@@ -235,9 +266,9 @@ div[data-testid="stMetricValue"] {{
 }}
 
 .period-badge {{
-    background:#e6fffa;
-    border:1px solid #319795;
-    color:#234e52;
+    background:#E6F7F5;
+    border:1px solid {C['teal']};
+    color:#0B5C54;
     padding:6px 12px;
     border-radius:8px;
     font-weight:700;
@@ -246,46 +277,71 @@ div[data-testid="stMetricValue"] {{
     display:inline-block;
 }}
 
-/* تنسيق شريط العنوان المدمج مع القائمة المنسدلة */
-div[data-testid="stHorizontalBlock"]:has(.integrated-header-marker) {{
-    background: linear-gradient(100deg, {C['navy']}, {C['navy2']});
-    border-radius: 10px;
-    padding: 5px 10px;
-    align-items: center;
-    margin-bottom: 10px;
-    min-height: 44px;
+/* ---------- Cards: كل بانل داخل بطاقة بيضاء ---------- */
+div[class*="st-key-card_"] {{
+    background:{C['white']};
+    border:1px solid {C['border']};
+    border-radius:16px;
+    padding:12px 14px 10px;
+    box-shadow:0 4px 14px rgba(11,37,69,.07);
 }}
 
-div[data-testid="stHorizontalBlock"]:has(.integrated-header-marker) > div[data-testid="stColumn"] {{
-    display: flex;
-    align-items: center;
+/* ---------- شريط العنوان + القائمة المنسدلة (الصف فقط) ---------- */
+div[class*="st-key-hdr_"] {{
+    background:linear-gradient(100deg,{C['navy']},{C['navy2']});
+    border-radius:10px;
+    padding:6px 10px;
+    margin-bottom:10px;
+    min-height:44px;
 }}
 
-div[data-testid="stHorizontalBlock"]:has(.integrated-header-marker) div[data-testid="stSelectbox"] {{
-    width: 100%;
-    margin: 0 !important;
+div[class*="st-key-hdr_"] div[data-testid="stHorizontalBlock"] {{
+    align-items:center;
 }}
 
-div[data-testid="stHorizontalBlock"]:has(.integrated-header-marker) div[data-testid="stSelectbox"] > div > div {{
-    min-height: 32px !important;
-    height: 32px !important;
-    border-radius: 7px !important;
-    border: 1px solid rgba(255, 255, 255, 0.35) !important;
-    background-color: rgba(255, 255, 255, 0.14) !important;
-    color: white !important;
-    font-weight: 750 !important;
-    font-size: 0.85rem !important;
-    padding-top: 0 !important;
-    padding-bottom: 0 !important;
+div[class*="st-key-hdr_"] div[data-testid="stSelectbox"] {{
+    width:100%;
+    margin:0 !important;
 }}
 
-div[data-testid="stHorizontalBlock"]:has(.integrated-header-marker) div[data-testid="stSelectbox"] svg {{
-    fill: white !important;
-    color: white !important;
+div[class*="st-key-hdr_"] div[data-baseweb="select"] > div {{
+    min-height:32px !important;
+    height:32px !important;
+    border-radius:7px !important;
+    border:1px solid rgba(255,255,255,.40) !important;
+    background-color:rgba(255,255,255,.14) !important;
+    padding-top:0 !important;
+    padding-bottom:0 !important;
 }}
 
-div[data-testid="stHorizontalBlock"]:has(.integrated-header-marker) div[data-testid="stSelectbox"] div {{
-    color: white !important;
+div[class*="st-key-hdr_"] div[data-baseweb="select"] * {{
+    color:white !important;
+    font-weight:750 !important;
+    font-size:.85rem !important;
+}}
+
+div[class*="st-key-hdr_"] div[data-baseweb="select"] svg {{
+    fill:white !important;
+}}
+
+/* ---------- Dataframe / tabs / radio ---------- */
+div[data-testid="stDataFrame"] {{
+    border:1px solid {C['border']};
+    border-radius:10px;
+    overflow:hidden;
+}}
+
+button[data-baseweb="tab"] {{
+    color:{C['muted']};
+    font-weight:700;
+}}
+
+button[data-baseweb="tab"][aria-selected="true"] {{
+    color:{C['teal']};
+}}
+
+div[data-baseweb="tab-highlight"] {{
+    background-color:{C['teal']} !important;
 }}
 
 hr {{
@@ -300,6 +356,9 @@ hr {{
     }}
     .dashboard-header {{
         padding:13px;
+    }}
+    div[class*="st-key-card_"] {{
+        padding:8px 8px 6px;
     }}
 }}
 </style>
@@ -463,6 +522,17 @@ def pct(v):
     return "—" if pd.isna(v) else f"{v:.1f}%"
 
 
+def status_color(rate):
+    """لون حالة الإنجاز: أخضر >= 100 ، كهرماني 80-99 ، أحمر < 80"""
+    if pd.isna(rate):
+        return C["muted"]
+    if rate >= 100:
+        return C["green"]
+    if rate >= 80:
+        return C["amber"]
+    return C["red"]
+
+
 # =========================================================
 # 7. CHARTS
 # =========================================================
@@ -473,6 +543,7 @@ def donut(actual, target, product, compact=False):
     ring = 100 if rate >= 100 else (rate if rate > 0 else 0.001)
     remainder = max(100 - ring, 0.001) if rate < 100 else 0.001
     label = f"{rate:.1f}%" if valid else "N/A"
+    label_color = status_color(rate) if valid else C["muted"]
 
     y_domain = [0.22, 0.98] if compact else [0.20, 0.98]
     chart_height = 112 if compact else 128
@@ -497,7 +568,10 @@ def donut(actual, target, product, compact=False):
 
     fig.add_annotation(
         x=0.5, y=center_y, xref="paper", yref="paper",
-        text=f"<b>{product}</b><br><span style='font-size:{pct_size}px;font-weight:800'>{label}</span>",
+        text=(
+            f"<b>{product}</b><br>"
+            f"<span style='font-size:{pct_size}px;font-weight:800;color:{label_color}'>{label}</span>"
+        ),
         showarrow=False, align="center",
         font=dict(size=title_size, color=C["text"])
     )
@@ -506,7 +580,7 @@ def donut(actual, target, product, compact=False):
         x=0.5, y=0.02, xref="paper", yref="paper",
         text=f"<b>{num(actual)} / {num(target)}</b>",
         showarrow=False, align="center",
-        font=dict(size=sub_size, color=C["navy"])
+        font=dict(size=sub_size, color=C["muted"])
     )
 
     fig.update_layout(
@@ -525,13 +599,13 @@ def total_bar_chart(period_label, actual, target, height=235):
 
     fig.add_bar(
         x=[period_label], y=[target if pd.notna(target) else 0],
-        name=t["target"], marker_color=C["navy"],
+        name=t["target"], marker_color=C["target"],
         text=[num(target)], textposition="auto", textfont=dict(size=11, color="white")
     )
 
     fig.add_bar(
         x=[period_label], y=[actual if pd.notna(actual) else 0],
-        name=t["actual"], marker_color=C["teal"],
+        name=t["actual"], marker_color=C["actual"],
         text=[num(actual)], textposition="auto", textfont=dict(size=11, color="white")
     )
 
@@ -554,13 +628,13 @@ def monthly_chart(month_df):
     fig = go.Figure()
 
     fig.add_bar(
-        x=base.Month, y=base.Target, name=t["target"], marker_color=C["navy"],
+        x=base.Month, y=base.Target, name=t["target"], marker_color=C["target"],
         text=base.Target.map(lambda v: "" if pd.isna(v) else f"{v:.2f}"),
         textposition="inside", textfont=dict(color="white", size=10)
     )
 
     fig.add_bar(
-        x=base.Month, y=base.Actual, name=t["actual"], marker_color=C["teal"],
+        x=base.Month, y=base.Actual, name=t["actual"], marker_color=C["actual"],
         text=base.Actual.map(lambda v: "" if pd.isna(v) else f"{v:.2f}"),
         textposition="inside", textfont=dict(color="white", size=10)
     )
@@ -583,63 +657,65 @@ def monthly_chart(month_df):
 def render_panel_with_selector(title, options, default_idx, year_df, filter_col, key, icon="📊"):
     current_val = st.session_state.get(key, options[default_idx])
 
-    # شريط عنوان موحد يجمع العنوان والقائمة المنسدلة داخله
-    h_col, s_col = st.columns([2.5, 1], gap="small")
-    with h_col:
-        st.markdown(
-            f'<div class="integrated-header-marker" style="color:white; font-weight:750; font-size:0.95rem; padding: 2px 4px;">{icon} {title}</div>',
-            unsafe_allow_html=True
-        )
-    with s_col:
-        selected_val = st.selectbox(
-            title,
-            options,
-            index=options.index(current_val) if current_val in options else default_idx,
-            key=key,
-            label_visibility="collapsed"
-        )
+    with st.container(key=f"card_{key}"):
+        # شريط العنوان الأزرق (الصف فقط) + القائمة المنسدلة
+        with st.container(key=f"hdr_{key}"):
+            h_col, s_col = st.columns([2.5, 1], gap="small")
+            with h_col:
+                st.markdown(
+                    f'<div style="color:white; font-weight:750; font-size:0.95rem; padding:2px 4px;">{icon} {title}</div>',
+                    unsafe_allow_html=True
+                )
+            with s_col:
+                selected_val = st.selectbox(
+                    title,
+                    options,
+                    index=options.index(current_val) if current_val in options else default_idx,
+                    key=key,
+                    label_visibility="collapsed"
+                )
 
-    sub_data = year_df[year_df[filter_col] == selected_val]
+        sub_data = year_df[year_df[filter_col] == selected_val]
 
-    if sub_data.empty:
-        st.info(t["no_data"])
-        return selected_val
+        if sub_data.empty:
+            st.info(t["no_data"])
+            return selected_val
 
-    target = total(sub_data.Target)
-    actual = total(sub_data.Actual)
-    variance = actual - target if pd.notna(actual) and pd.notna(target) else np.nan
-    rate = actual / target * 100 if pd.notna(actual) and pd.notna(target) and target > 0 else np.nan
+        target = total(sub_data.Target)
+        actual = total(sub_data.Actual)
+        variance = actual - target if pd.notna(actual) and pd.notna(target) else np.nan
+        rate = actual / target * 100 if pd.notna(actual) and pd.notna(target) and target > 0 else np.nan
 
-    a, b, c, d = st.columns(4)
-    a.metric(t["variance"], num(variance))
-    b.metric(t["achievement"], pct(rate))
-    c.metric(t["actual"], num(actual))
-    d.metric(t["target"], num(target))
+        a, b, c, d = st.columns(4)
+        a.metric(t["variance"], num(variance))
+        b.metric(t["achievement"], pct(rate))
+        c.metric(t["actual"], num(actual))
+        d.metric(t["target"], num(target))
 
-    bar_col, donuts_col = st.columns([1, 1.4], gap="small")
+        bar_col, donuts_col = st.columns([1, 1.4], gap="small")
 
-    with bar_col:
-        st.caption(f"📊 {t['total_chart']}")
-        st.plotly_chart(
-            total_bar_chart(selected_val, actual, target, height=238),
-            use_container_width=True,
-            config={"displayModeBar": False, "staticPlot": True},
-            key=f"{key}_bar"
-        )
+        with bar_col:
+            st.caption(f"📊 {t['total_chart']}")
+            st.plotly_chart(
+                total_bar_chart(selected_val, actual, target, height=238),
+                use_container_width=True,
+                config={"displayModeBar": False, "staticPlot": True},
+                key=f"{key}_bar"
+            )
 
-    with donuts_col:
-        st.caption(f"🎯 {t['product_perf']} · {selected_val}")
-        for products_row in (PRODUCTS[:2], PRODUCTS[2:]):
-            cols = st.columns(2, gap="small")
-            for col, product in zip(cols, products_row):
-                subset = sub_data[sub_data.Product == product]
-                with col:
-                    st.plotly_chart(
-                        donut(total(subset.Actual), total(subset.Target), product, compact=True),
-                        use_container_width=True,
-                        config={"displayModeBar": False, "staticPlot": True},
-                        key=f"{key}_{product}"
-                    )
+        with donuts_col:
+            st.caption(f"🎯 {t['product_perf']} · {selected_val}")
+            for products_row in (PRODUCTS[:2], PRODUCTS[2:]):
+                cols = st.columns(2, gap="small")
+                for col, product in zip(cols, products_row):
+                    subset = sub_data[sub_data.Product == product]
+                    with col:
+                        st.plotly_chart(
+                            donut(total(subset.Actual), total(subset.Target), product, compact=True),
+                            use_container_width=True,
+                            config={"displayModeBar": False, "staticPlot": True},
+                            key=f"{key}_{product}"
+                        )
 
     return selected_val
 
@@ -924,106 +1000,107 @@ with month_col:
     )
 
 with daily_col:
-    st.markdown(f'<div class="panel-heading">📋 {t["daily"]}</div>', unsafe_allow_html=True)
-    daily_df, daily_error = daily_data_from_sheet(sheets)
+    with st.container(key="card_daily"):
+        st.markdown(f'<div class="panel-heading">📋 {t["daily"]}</div>', unsafe_allow_html=True)
+        daily_df, daily_error = daily_data_from_sheet(sheets)
 
-    if daily_error:
-        st.error(daily_error)
-    elif daily_df is None or daily_df.empty:
-        st.warning("لا توجد بيانات مبيعات يومية صالحة في شيت Data.")
-    else:
-        dy_filtered = daily_df[daily_df["Year"] == int(year)].copy()
-        selected_month_number = MONTHS.index(month) + 1
-        dy_filtered = dy_filtered[dy_filtered["Month_Num"] == selected_month_number].copy()
-
-        if dy_filtered.empty:
-            st.info(f"لا توجد مبيعات مسجلة في {MONTH_AR[month]} {year}.")
+        if daily_error:
+            st.error(daily_error)
+        elif daily_df is None or daily_df.empty:
+            st.warning("لا توجد بيانات مبيعات يومية صالحة في شيت Data.")
         else:
-            min_d = dy_filtered["Date_Only"].min()
-            max_d = dy_filtered["Date_Only"].max()
+            dy_filtered = daily_df[daily_df["Year"] == int(year)].copy()
+            selected_month_number = MONTHS.index(month) + 1
+            dy_filtered = dy_filtered[dy_filtered["Month_Num"] == selected_month_number].copy()
 
-            st.markdown(
-                f'<div class="period-badge">{t["period_display"]} {min_d} إلى {max_d}</div>',
-                unsafe_allow_html=True
-            )
-
-            filter_mode = st.radio(
-                "طريقة العرض:",
-                ["جميع الأيام", "تاريخ محدد", "نطاق تاريخي"],
-                horizontal=True,
-                key="daily_filter_mode"
-            )
-
-            daily_view = dy_filtered.copy()
-
-            if filter_mode == "تاريخ محدد":
-                selected_date = st.date_input(
-                    "اختر اليوم المطلوب:",
-                    value=max_d,
-                    min_value=min_d,
-                    max_value=max_d,
-                    key="daily_single_date"
-                )
-                if selected_date:
-                    daily_view = daily_view[daily_view["Date_Only"] == selected_date]
-
-            elif filter_mode == "نطاق تاريخي":
-                date_range = st.date_input(
-                    "اختر نطاق التواريخ:",
-                    value=(min_d, max_d),
-                    min_value=min_d,
-                    max_value=max_d,
-                    key="daily_date_range"
-                )
-                if isinstance(date_range, tuple) and len(date_range) == 2:
-                    start_d, end_d = date_range
-                    if start_d and end_d:
-                        daily_view = daily_view[
-                            (daily_view["Date_Only"] >= start_d) &
-                            (daily_view["Date_Only"] <= end_d)
-                        ]
-
-            if not daily_view.empty:
-                grouped_daily = (
-                    daily_view.groupby("Date_Only", as_index=False)
-                    .agg(
-                        Sales_Count=("Amount", lambda s: s.notna().sum()),
-                        Total_I_Sum=("Total_I", lambda s: s.sum(min_count=1)),
-                        Customer_Count=("Customer_No", "nunique"),
-                        Total_Amount=("Amount", lambda s: s.sum(min_count=1))
-                    )
-                    .sort_values("Date_Only", ascending=False)
-                )
-
-                display_daily = grouped_daily.rename(
-                    columns={
-                        "Date_Only": "التاريخ",
-                        "Sales_Count": t["sales_count"],
-                        "Total_I_Sum": t["total_i"],
-                        "Customer_Count": t["customer_count"],
-                        "Total_Amount": t["total_amount"]
-                    }
-                )
-
-                format_dict = {
-                    t["total_i"]: "{:,.2f}",
-                    t["total_amount"]: "{:,.2f}"
-                }
-
-                st.dataframe(
-                    display_daily.style.format(format_dict, na_rep="—"),
-                    use_container_width=True,
-                    hide_index=True,
-                    height=260
-                )
-
-                st.markdown("#### 📊 إجمالي الفترة المعروضة")
-                m1, m2, m3 = st.columns(3)
-                m1.metric(t["sales_count"], f"{len(daily_view):,}")
-                m2.metric(t["total_i"], num(daily_view["Total_I"].sum(min_count=1)))
-                m3.metric(t["total_amount"], num(daily_view["Amount"].sum(min_count=1)))
+            if dy_filtered.empty:
+                st.info(f"لا توجد مبيعات مسجلة في {MONTH_AR[month]} {year}.")
             else:
-                st.warning("لا توجد مبيعات في التاريخ المحدد.")
+                min_d = dy_filtered["Date_Only"].min()
+                max_d = dy_filtered["Date_Only"].max()
+
+                st.markdown(
+                    f'<div class="period-badge">{t["period_display"]} {min_d} إلى {max_d}</div>',
+                    unsafe_allow_html=True
+                )
+
+                filter_mode = st.radio(
+                    "طريقة العرض:",
+                    ["جميع الأيام", "تاريخ محدد", "نطاق تاريخي"],
+                    horizontal=True,
+                    key="daily_filter_mode"
+                )
+
+                daily_view = dy_filtered.copy()
+
+                if filter_mode == "تاريخ محدد":
+                    selected_date = st.date_input(
+                        "اختر اليوم المطلوب:",
+                        value=max_d,
+                        min_value=min_d,
+                        max_value=max_d,
+                        key="daily_single_date"
+                    )
+                    if selected_date:
+                        daily_view = daily_view[daily_view["Date_Only"] == selected_date]
+
+                elif filter_mode == "نطاق تاريخي":
+                    date_range = st.date_input(
+                        "اختر نطاق التواريخ:",
+                        value=(min_d, max_d),
+                        min_value=min_d,
+                        max_value=max_d,
+                        key="daily_date_range"
+                    )
+                    if isinstance(date_range, tuple) and len(date_range) == 2:
+                        start_d, end_d = date_range
+                        if start_d and end_d:
+                            daily_view = daily_view[
+                                (daily_view["Date_Only"] >= start_d) &
+                                (daily_view["Date_Only"] <= end_d)
+                            ]
+
+                if not daily_view.empty:
+                    grouped_daily = (
+                        daily_view.groupby("Date_Only", as_index=False)
+                        .agg(
+                            Sales_Count=("Amount", lambda s: s.notna().sum()),
+                            Total_I_Sum=("Total_I", lambda s: s.sum(min_count=1)),
+                            Customer_Count=("Customer_No", "nunique"),
+                            Total_Amount=("Amount", lambda s: s.sum(min_count=1))
+                        )
+                        .sort_values("Date_Only", ascending=False)
+                    )
+
+                    display_daily = grouped_daily.rename(
+                        columns={
+                            "Date_Only": "التاريخ",
+                            "Sales_Count": t["sales_count"],
+                            "Total_I_Sum": t["total_i"],
+                            "Customer_Count": t["customer_count"],
+                            "Total_Amount": t["total_amount"]
+                        }
+                    )
+
+                    format_dict = {
+                        t["total_i"]: "{:,.2f}",
+                        t["total_amount"]: "{:,.2f}"
+                    }
+
+                    st.dataframe(
+                        display_daily.style.format(format_dict, na_rep="—"),
+                        use_container_width=True,
+                        hide_index=True,
+                        height=260
+                    )
+
+                    st.markdown("#### 📊 إجمالي الفترة المعروضة")
+                    m1, m2, m3 = st.columns(3)
+                    m1.metric(t["sales_count"], f"{len(daily_view):,}")
+                    m2.metric(t["total_i"], num(daily_view["Total_I"].sum(min_count=1)))
+                    m3.metric(t["total_amount"], num(daily_view["Amount"].sum(min_count=1)))
+                else:
+                    st.warning("لا توجد مبيعات في التاريخ المحدد.")
 
 
 # =========================================================
