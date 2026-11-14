@@ -45,7 +45,7 @@ h1, h2, h3 { color: #142B4A; }
 """, unsafe_allow_html=True)
 
 st.title("📊 لوحة تحكم أداء المبيعات والتحليل المتقدم")
-st.markdown("تحليل شامل للمستهدف والمبيعات الفعلية (سنوي، ربعي، شهري مفصل لكل شهر، والمبيعات اليومية).")
+st.markdown("تحليل شامل للمستهدف والمبيعات الفعلية (سنوي، نصف سنوي، ربعي، شهري مفصل، والمبيعات اليومية).")
 
 # --- 1. محرك تحميل جميع الشيتات ---
 @st.cache_data
@@ -304,8 +304,17 @@ if sheets_dict is not None:
             st.subheader(f"📈 نظرة عامة على الأداء الشهري لعام {selected_year}")
             st.plotly_chart(plot_monthly_target_vs_actual(m_summary), use_container_width=True, config={'displayModeBar': False})
 
-            # --- 3. قسم تحليل الأداء الربعي (الأعمدة على اليسار والدوائر على اليمين + 4 بطاقات إحصائية بالأسفل) ---
+            # --- 3. قسم تحليل الأداء النصف سنوي (تحكم مستقل لكل نصف) ---
             st.markdown("---")
+            st.subheader(f"📅 تحليل الأداء النصف السنوي - {selected_year}")
+            selected_half = st.selectbox("اختر النصف السنوي للعرض:", ["H1", "H2"], index=0)
+
+            half_df = clean_df[
+                (clean_df["Year"] == selected_year) & 
+                (clean_df["Half"] == selected_half) & 
+                (clean_df["Product"].isin(selected_products))
+            ].copy()
+
             prod_colors = {
                 "Fluids": COLORS["navy_blue"],
                 "DEO": COLORS["teal"],
@@ -313,22 +322,90 @@ if sheets_dict is not None:
                 "Min": COLORS["dark_blue"]
             }
 
+            col_h_right, col_h_left = st.columns([1, 1.3])
+
+            with col_h_right:
+                st.markdown(f"##### 📊 إجمالي أداء النصف {selected_half}")
+                h_summary = summarize_by_period(half_df, ["Quarter"])
+
+                fig_h = go.Figure()
+                fig_h.add_trace(go.Bar(
+                    x=h_summary["Quarter"], y=h_summary["Target"],
+                    name="المستهدف", marker_color=COLORS["navy_blue"],
+                    text=h_summary["Target"].apply(lambda x: f"{x:,.2f}"), textposition="auto"
+                ))
+                fig_h.add_trace(go.Bar(
+                    x=h_summary["Quarter"], y=h_summary["Actual"],
+                    name="الفعلي", marker_color=COLORS["teal"],
+                    text=h_summary.apply(lambda r: f"{r['Actual']:,.2f}<br>({r['Achievement %']:.1f}%)" if pd.notna(r['Actual']) else "غير مسجل", axis=1), 
+                    textposition="auto"
+                ))
+                fig_h.update_layout(
+                    barmode="group",
+                    plot_bgcolor=COLORS["white"],
+                    paper_bgcolor=COLORS["white"],
+                    font_color=COLORS["text"],
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    height=310,
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10))
+                )
+                st.plotly_chart(fig_h, use_container_width=True, config={'displayModeBar': False})
+
+            with col_h_left:
+                st.markdown(f"##### نسب الإنجاز للمنتجات (نصف {selected_half})")
+                for row_idx in range(2):
+                    d_cols = st.columns(2)
+                    for col_idx in range(2):
+                        prod_idx = row_idx * 2 + col_idx
+                        if prod_idx < len(PRODUCTS):
+                            prod = PRODUCTS[prod_idx]
+                            prod_filtered = half_df[half_df["Product"] == prod]
+                            p_target = prod_filtered["Target"].sum()
+                            p_actual = prod_filtered["Actual"].sum(min_count=1)
+                            p_pct = (p_actual / p_target * 100) if (pd.notna(p_actual) and p_target > 0) else np.nan
+
+                            with d_cols[col_idx]:
+                                st.plotly_chart(create_donut_chart(p_pct, prod_colors[prod], product_name=prod, actual_val=p_actual, target_val=p_target), use_container_width=True, config={'displayModeBar': False})
+
+            # بطاقات الملخص النصف سنوي
+            h_total_target = h_summary["Target"].sum()
+            h_total_actual = h_summary["Actual"].sum(min_count=1)
+            h_ach_pct = (h_total_actual / h_total_target * 100) if (pd.notna(h_total_actual) and h_total_target > 0) else np.nan
+            h_var = (h_total_actual - h_total_target) if pd.notna(h_total_actual) else np.nan
+
+            h_b1, h_b2, h_b3, h_b4 = st.columns(4)
+            h_b1.metric("الفارق (Variance)", f"{h_var:+,.2f}" if pd.notna(h_var) else "—")
+            h_b2.metric(f"نسبة تحقيق النصف {selected_half}", f"{h_ach_pct:.1f}%" if pd.notna(h_ach_pct) else "—")
+            h_b3.metric(f"إجمالي فعلي النصف {selected_half}", f"{h_total_actual:,.2f}" if pd.notna(h_total_actual) else "غير مسجل")
+            h_b4.metric(f"إجمالي مستهدف النصف {selected_half}", f"{h_total_target:,.2f}")
+
+            # --- 4. قسم تحليل الأداء الربعي (تحكم مستقل للأرباع) ---
+            st.markdown("---")
+            st.subheader(f"🎯 تحليل أداء المنتجات مقابل الإجمالي الربعي - {selected_year}")
+            selected_single_quarter = st.selectbox("اختر الربع السنوي للعرض:", ["Q1", "Q2", "Q3", "Q4"], index=2)
+
+            quarter_df = clean_df[
+                (clean_df["Year"] == selected_year) & 
+                (clean_df["Quarter"] == selected_single_quarter) & 
+                (clean_df["Product"].isin(selected_products))
+            ].copy()
+
             col_q_right, col_q_left = st.columns([1, 1.3])
 
             with col_q_right:
-                st.markdown("##### 📊 إجمالي أداء الأرباع السنوية")
-                q_summary = summarize_by_period(filtered_df, ["Quarter"])
+                st.markdown(f"##### 📊 إجمالي أداء الربع {selected_single_quarter}")
+                q_single_summary = summarize_by_period(quarter_df, ["Quarter"])
 
                 fig_q = go.Figure()
                 fig_q.add_trace(go.Bar(
-                    x=q_summary["Quarter"], y=q_summary["Target"],
+                    x=q_single_summary["Quarter"], y=q_single_summary["Target"],
                     name="المستهدف", marker_color=COLORS["navy_blue"],
-                    text=q_summary["Target"].apply(lambda x: f"{x:,.2f}"), textposition="auto"
+                    text=q_single_summary["Target"].apply(lambda x: f"{x:,.2f}"), textposition="auto"
                 ))
                 fig_q.add_trace(go.Bar(
-                    x=q_summary["Quarter"], y=q_summary["Actual"],
+                    x=q_single_summary["Quarter"], y=q_single_summary["Actual"],
                     name="الفعلي", marker_color=COLORS["teal"],
-                    text=q_summary.apply(lambda r: f"{r['Actual']:,.2f}<br>({r['Achievement %']:.1f}%)" if pd.notna(r['Actual']) else "غير مسجل", axis=1), 
+                    text=q_single_summary.apply(lambda r: f"{r['Actual']:,.2f}<br>({r['Achievement %']:.1f}%)" if pd.notna(r['Actual']) else "غير مسجل", axis=1), 
                     textposition="auto"
                 ))
                 fig_q.update_layout(
@@ -343,18 +420,14 @@ if sheets_dict is not None:
                 st.plotly_chart(fig_q, use_container_width=True, config={'displayModeBar': False})
 
             with col_q_left:
-                st.markdown("##### نسب الإنجاز للمنتجات (الربع السنوي)")
+                st.markdown(f"##### نسب الإنجاز للمنتجات (الربع {selected_single_quarter})")
                 for row_idx in range(2):
                     d_cols = st.columns(2)
                     for col_idx in range(2):
                         prod_idx = row_idx * 2 + col_idx
                         if prod_idx < len(PRODUCTS):
                             prod = PRODUCTS[prod_idx]
-                            prod_filtered = clean_df[
-                                (clean_df["Year"] == selected_year) & 
-                                (clean_df["Quarter"].isin(selected_quarters)) & 
-                                (clean_df["Product"] == prod)
-                            ]
+                            prod_filtered = quarter_df[quarter_df["Product"] == prod]
                             p_target = prod_filtered["Target"].sum()
                             p_actual = prod_filtered["Actual"].sum(min_count=1)
                             p_pct = (p_actual / p_target * 100) if (pd.notna(p_actual) and p_target > 0) else np.nan
@@ -363,22 +436,22 @@ if sheets_dict is not None:
                                 st.plotly_chart(create_donut_chart(p_pct, prod_colors[prod], product_name=prod, actual_val=p_actual, target_val=p_target), use_container_width=True, config={'displayModeBar': False})
 
             # بطاقات الملخص الربعي السفلي
-            q_total_target = q_summary["Target"].sum()
-            q_total_actual = q_summary["Actual"].sum(min_count=1)
+            q_total_target = q_single_summary["Target"].sum()
+            q_total_actual = q_single_summary["Actual"].sum(min_count=1)
             q_ach_pct = (q_total_actual / q_total_target * 100) if (pd.notna(q_total_actual) and q_total_target > 0) else np.nan
             q_var = (q_total_actual - q_total_target) if pd.notna(q_total_actual) else np.nan
 
             q_b1, q_b2, q_b3, q_b4 = st.columns(4)
             q_b1.metric("الفارق (Variance)", f"{q_var:+,.2f}" if pd.notna(q_var) else "—")
-            q_b2.metric("نسبة تحقيق الأرباع", f"{q_ach_pct:.1f}%" if pd.notna(q_ach_pct) else "—")
-            q_b3.metric("إجمالي فعلي الأرباع", f"{q_total_actual:,.2f}" if pd.notna(q_total_actual) else "غير مسجل")
-            q_b4.metric("إجمالي مستهدف الأرباع", f"{q_total_target:,.2f}")
+            q_b2.metric(f"نسبة تحقيق الربع {selected_single_quarter}", f"{q_ach_pct:.1f}%" if pd.notna(q_ach_pct) else "—")
+            q_b3.metric(f"إجمالي فعلي الربع {selected_single_quarter}", f"{q_total_actual:,.2f}" if pd.notna(q_total_actual) else "غير مسجل")
+            q_b4.metric(f"إجمالي مستهدف الربع {selected_single_quarter}", f"{q_total_target:,.2f}")
 
             st.markdown("---")
 
-            # --- 4. قسم تحليل الأداء الشهري (الأعمدة على اليسار والدوائر على اليمين + 4 بطاقات إحصائية بالأسفل) ---
-            selected_single_month = st.selectbox("اختر الشهر لعرض تفاصيله:", VALID_MONTHS, index=0)
-            st.markdown(f"### تحليل أداء المنتجات مقابل إجمالي المبيعات لشهر {selected_single_month} - {selected_year}")
+            # --- 5. قسم تحليل الأداء الشهري ---
+            selected_single_month = st.selectbox("اختر الشهر للعرض:", VALID_MONTHS, index=8)
+            st.subheader(f"🔍 تحليل أداء المنتجات مقابل إجمالي المبيعات لشهر {selected_single_month} - {selected_year}")
             
             single_month_df = clean_df[
                 (clean_df["Year"] == selected_year) & 
@@ -434,7 +507,7 @@ if sheets_dict is not None:
                             with m_d_cols[col_idx]:
                                 st.plotly_chart(create_donut_chart(p_pct, prod_colors[prod], product_name=prod, actual_val=p_a, target_val=p_t), use_container_width=True, config={'displayModeBar': False})
 
-            # بطاقات الملخص الشهري السفلي (مطابقة للصورة تماماً)
+            # بطاقات الملخص الشهري السفلي
             m_b1, m_b2, m_b3, m_b4 = st.columns(4)
             m_b1.metric("الفارق (Variance)", f"{sm_var:+,.2f}" if pd.notna(sm_var) else "—")
             m_b2.metric("نسبة تحقيق الشهر", f"{sm_ach:.1f}%" if pd.notna(sm_ach) else "—")
@@ -443,7 +516,7 @@ if sheets_dict is not None:
 
             st.markdown("---")
 
-            # --- 5. تفاصيل المبيعات اليومية من شيت Sales Report ---
+            # --- 6. تفاصيل المبيعات اليومية من شيت Sales Report ---
             st.subheader("📅 تحليل المبيعات اليومية (Daily Sales Breakdown)")
             daily_sheets = detect_daily_sales_data(sheets_dict)
 
@@ -514,7 +587,7 @@ if sheets_dict is not None:
             export_sheets = {
                 "Monthly_All": m_summary.drop(columns=["Month_Num"]),
                 f"Month_{selected_single_month}": single_month_enriched.drop(columns=["Month_Num"]),
-                "Quarterly": q_summary,
+                "Quarterly": q_single_summary,
                 "Products": p_summary
             }
             if daily_sheets and 'daily_grouped' in locals():
