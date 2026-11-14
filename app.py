@@ -101,7 +101,6 @@ TEXT = {
         "total_i": "إجمالي الكمية",
         "customer_count": "عدد العملاء",
         "total_amount": "مبلغ المبيعات (SAR)",
-        "period_display": "📅 الفترة النشطة:",
         "all": "الكل",
         "na": "غير متاحة",
     },
@@ -140,7 +139,6 @@ TEXT = {
         "total_i": "Total Quantities",
         "customer_count": "Customers",
         "total_amount": "Sales Amount (SAR)",
-        "period_display": "📅 Active Period:",
         "all": "All",
         "na": "N/A",
     },
@@ -149,9 +147,6 @@ TEXT = {
 # =========================================================
 # 2. CSS DESIGN
 # =========================================================
-# ملاحظة مهمة: تنسيق شريط العنوان الأزرق أصبح يعتمد على
-# st.container(key="hdr_...") بدل :has() حتى لا يتلوّن البانل كاملاً.
-# يتطلب Streamlit >= 1.39
 
 st.markdown(f"""
 <style>
@@ -264,18 +259,6 @@ div[data-testid="stMetricValue"] {{
     min-height:44px;
     display:flex;
     align-items:center;
-}}
-
-.period-badge {{
-    background:#E6F7F5;
-    border:1px solid {C['teal']};
-    color:#0B5C54;
-    padding:6px 12px;
-    border-radius:8px;
-    font-weight:700;
-    font-size:0.85rem;
-    margin-bottom:10px;
-    display:inline-block;
 }}
 
 /* ---------- Cards: كل بانل داخل بطاقة بيضاء ---------- */
@@ -1026,11 +1009,6 @@ with daily_col:
                     min_d = dy_filtered["Date_Only"].min()
                     max_d = dy_filtered["Date_Only"].max()
 
-                st.markdown(
-                    f'<div class="period-badge">{t["period_display"]} {min_d} إلى {max_d}</div>',
-                    unsafe_allow_html=True
-                )
-
                 filter_mode = st.radio(
                     "طريقة العرض:",
                     ["الشهر كاملاً", "تاريخ محدد", "نطاق تاريخي"],
@@ -1204,3 +1182,4 @@ st.download_button(
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     use_container_width=True
 )
+ 
