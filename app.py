@@ -219,14 +219,14 @@ def create_donut_chart(percentage, color, product_name="", actual_val=None, targ
     
     center_text = f"<b>{product_name}</b><br><span style='font-size:15px; color:#142B4A;'><b>{pct_text}</b></span><br><span style='font-size:9px; color:#555;'>الفعلي: {act_str}<br>المستهدف: {tgt_str}</span>" if product_name else f"<b>{pct_text}</b>"
     
-    fig = go.Figure(data=[go.Pie(values=[display_val, 100 - display_val], hole=0.72, marker_colors=[color, "#E2E8F0"], textinfo="none", hoverinfo="none", sort=False)])
+    fig = go.Figure(data=[go.Pie(values=[display_val, 100 - display_val], hole=0.7, marker_colors=[color, "#E2E8F0"], textinfo="none", hoverinfo="none", sort=False)])
     fig.update_layout(
         showlegend=False, 
-        annotations=[dict(text=center_text, x=0.5, y=0.5, font_size=11, font_color=COLORS["text"], showarrow=False)], 
+        annotations=[dict(text=center_text, x=0.5, y=0.5, font_size=12, font_color=COLORS["text"], showarrow=False)], 
         plot_bgcolor="rgba(0,0,0,0)", 
         paper_bgcolor="rgba(0,0,0,0)", 
         margin=dict(l=5, r=5, t=5, b=5), 
-        height=185
+        height=190
     )
     return fig
 
@@ -296,7 +296,7 @@ if sheets_dict is not None:
             st.subheader(f"📈 نظرة عامة على الأداء الشهري لعام {selected_year}")
             st.plotly_chart(plot_monthly_target_vs_actual(m_summary), use_container_width=True, config={'displayModeBar': False})
 
-            # --- 3. نسب تحقيق المستهدف حسب المنتج والتحليل الربعي (الشبكة المربعة 2×2 للدوائر بجانب أعمدة التحليل الربعي) ---
+            # --- 3. نسب تحقيق المستهدف حسب المنتج والتحليل الربعي (الشبكة المربعة 2×2) ---
             st.markdown("### 🎯 نسب تحقيق المستهدف حسب المنتج والتحليل الربعي")
             
             prod_colors = {
@@ -357,9 +357,9 @@ if sheets_dict is not None:
 
             st.markdown("---")
 
-            # --- 4. تفاصيل المبيعات الشهرية عبر بطاقات دائرية شبكية وأعمدة تفصيلية للشهر المحدد ---
-            st.subheader(f"🔍 مقارنة منتجات الشهر المفصل - {selected_year}")
-            selected_single_month = st.selectbox("اختر الشهر لعرض تفاصيل إنجاز المنتجات:", VALID_MONTHS, index=0)
+            # --- 4. تفاصيل المبيعات الشهرية عبر بطاقات دائرية شبكية للشهر المحدد (2 × 2) ---
+            st.subheader(f"🔍 مقارنة منتجات الشهر المفصل (بطاقات نسب الإنجاز) - {selected_year}")
+            selected_single_month = st.selectbox("اختر الشهر لعرض دوائر نسب تحقيقه الكاملة:", VALID_MONTHS, index=0)
             
             single_month_df = clean_df[
                 (clean_df["Year"] == selected_year) & 
@@ -379,51 +379,22 @@ if sheets_dict is not None:
             sm3.metric("نسبة تحقيق الشهر", f"{sm_ach:.1f}%" if pd.notna(sm_ach) else "—")
             sm4.metric("الفارق (Variance)", f"{sm_var:+,.2f}" if pd.notna(sm_var) else "—")
 
-            st.markdown(f"**تحليل منتجات شهر {selected_single_month} (الدوائر وأعمدة المقارنة):**")
+            st.markdown(f"**نسب تحقيق المنتجات لشهر {selected_single_month}:**")
             
-            # قسم جنباً إلى جنب: الدوائر الشبكية المربعة (2×2) في اليمين، ورسم الأعمدة التفصيلي للشهر في اليسار
-            col_m_left, col_m_right = st.columns([1.5, 1])
-
-            with col_m_left:
-                st.markdown("##### نسب الإنجاز للمنتجات (شهري)")
-                for row_idx in range(2):
-                    m_d_cols = st.columns(2)
-                    for col_idx in range(2):
-                        prod_idx = row_idx * 2 + col_idx
-                        if prod_idx < len(PRODUCTS):
-                            prod = PRODUCTS[prod_idx]
-                            p_row = single_month_enriched[single_month_enriched["Product"] == prod]
-                            p_pct = p_row["Achievement %"].values[0] if not p_row.empty else np.nan
-                            p_t = p_row["Target"].values[0] if not p_row.empty else 0
-                            p_a = p_row["Actual"].values[0] if not p_row.empty else np.nan
-                            
-                            with m_d_cols[col_idx]:
-                                st.plotly_chart(create_donut_chart(p_pct, prod_colors[prod], product_name=prod, actual_val=p_a, target_val=p_t), use_container_width=True, config={'displayModeBar': False})
-
-            with col_m_right:
-                st.markdown(f"##### 📊 تحليل أعمدة المنتجات لشهر {selected_single_month}")
-                fig_m_bar = go.Figure()
-                fig_m_bar.add_trace(go.Bar(
-                    x=single_month_enriched["Product"], y=single_month_enriched["Target"],
-                    name="المستهدف", marker_color=COLORS["navy_blue"],
-                    text=single_month_enriched["Target"].apply(lambda x: f"المستهدف: {x:,.2f}"), textposition="auto"
-                ))
-                fig_m_bar.add_trace(go.Bar(
-                    x=single_month_enriched["Product"], y=single_month_enriched["Actual"],
-                    name="الفعلي", marker_color=COLORS["teal"],
-                    text=single_month_enriched.apply(lambda r: f"الفعلي: {r['Actual']:,.2f}<br>({r['Achievement %']:.1f}%)" if pd.notna(r['Actual']) else "غير مسجل", axis=1), 
-                    textposition="auto"
-                ))
-                fig_m_bar.update_layout(
-                    barmode="group",
-                    plot_bgcolor=COLORS["white"],
-                    paper_bgcolor=COLORS["white"],
-                    font_color=COLORS["text"],
-                    margin=dict(l=10, r=10, t=10, b=10),
-                    height=390,
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10))
-                )
-                st.plotly_chart(fig_m_bar, use_container_width=True, config={'displayModeBar': False})
+            # ترتيب دوائر الشهر المفصل في شبكة مربعة (2 × 2) مع البيانات بالداخل
+            for row_idx in range(2):
+                m_d_cols = st.columns(2)
+                for col_idx in range(2):
+                    prod_idx = row_idx * 2 + col_idx
+                    if prod_idx < len(PRODUCTS):
+                        prod = PRODUCTS[prod_idx]
+                        p_row = single_month_enriched[single_month_enriched["Product"] == prod]
+                        p_pct = p_row["Achievement %"].values[0] if not p_row.empty else np.nan
+                        p_t = p_row["Target"].values[0] if not p_row.empty else 0
+                        p_a = p_row["Actual"].values[0] if not p_row.empty else np.nan
+                        
+                        with m_d_cols[col_idx]:
+                            st.plotly_chart(create_donut_chart(p_pct, prod_colors[prod], product_name=prod, actual_val=p_a, target_val=p_t), use_container_width=True, config={'displayModeBar': False})
 
             st.markdown("---")
 
