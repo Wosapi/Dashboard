@@ -165,7 +165,7 @@ def num(v):
 def pct(v):
     return "—" if pd.isna(v) else f"{v:.1f}%"
 
-# دوائر كاملة 100% وبحجم مريح وغير مقتطع مع وضوح النصوص تماماً
+# دوائر متناسقة وكاملة 100% بدون أي قص مع هوامش أمان كاملة
 def donut(actual, target, product):
     valid = pd.notna(actual) and pd.notna(target) and target > 0
     rate = actual / target * 100 if valid else 0
@@ -173,32 +173,32 @@ def donut(actual, target, product):
     label = f"{rate:.1f}%" if valid else "N/A"
     
     fig = go.Figure(go.Pie(
-        values=[max(ring, .001), max(100-ring, .001)], hole=.68, sort=False,
+        values=[max(ring, .001), max(100-ring, .001)], hole=.66, sort=False,
         marker=dict(colors=[PCOLORS[product], C["gray"]], line=dict(color="white", width=2)),
         textinfo="none", hovertemplate=f"{product}<br>{label}<extra></extra>"
     ))
     
     fig.add_annotation(
-        x=0.5, y=0.52,
-        text=f"<b>{product}</b><br><b style='font-size:13px; color:#102D50;'>{label}</b>",
-        showarrow=False, font=dict(size=10.5, color=C["text"])
+        x=0.5, y=0.53,
+        text=f"<b>{product}</b><br><b style='font-size:12.5px; color:#102D50;'>{label}</b>",
+        showarrow=False, font=dict(size=10, color=C["text"])
     )
     
     fig.add_annotation(
-        x=0.5, y=-0.28,
+        x=0.5, y=-0.32,
         text=f"<b style='color:#0F172A; font-size:10px;'>الفعلي: {num(actual)}</b><br><b style='color:#475569; font-size:9.5px;'>المستهدف: {num(target)}</b>",
         showarrow=False, font=dict(size=9.5), xref="paper", yref="paper"
     )
     
     fig.update_layout(
-        height=160, showlegend=False,
-        margin=dict(l=20, r=20, t=10, b=35),
+        height=155, showlegend=False,
+        margin=dict(l=18, r=18, t=10, b=36),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
     )
     return fig
 
-# رسم بياني للأعمدة الإجمالية بتصميم واسع وواضح
-def total_bar_chart(period_label, actual, target, height=220):
+# أعمدة إجمالي الفترة
+def total_bar_chart(period_label, actual, target, height=210):
     fig = go.Figure()
     fig.add_bar(
         x=[period_label], y=[target if pd.notna(target) else 0],
@@ -211,11 +211,11 @@ def total_bar_chart(period_label, actual, target, height=220):
         text=[num(actual)], textposition="auto", textfont=dict(size=11, color="white")
     )
     fig.update_layout(
-        barmode="group", height=height, margin=dict(l=10, r=10, t=25, b=10),
+        barmode="group", height=height, margin=dict(l=6, r=6, t=22, b=6),
         plot_bgcolor="white", paper_bgcolor="white", font=dict(color=C["text"], size=10),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10)),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=9.5)),
         xaxis=dict(showgrid=False), yaxis=dict(rangemode="tozero", gridcolor=C["gray"]),
-        bargap=0.30, bargroupgap=0.10
+        bargap=0.3, bargroupgap=0.1
     )
     return fig
 
@@ -235,7 +235,8 @@ def monthly_chart(month_df):
         bargap=.22, bargroupgap=.08)
     return fig
 
-def render_panel(title, period, data, key, is_full_width=False):
+# دالة رسم الخانة بتصميم مرتب ومنع القصور نهائياً
+def render_panel(title, period, data, key):
     st.markdown(f'<div class="panel-heading">📊 {title} ({period})</div>', unsafe_allow_html=True)
     if data.empty:
         st.info(t["no_data"])
@@ -250,41 +251,28 @@ def render_panel(title, period, data, key, is_full_width=False):
     c.metric(t["actual"], num(actual))
     d.metric(t["target"], num(target))
     
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("<div style='height:4px;'></div>", unsafe_allow_html=True)
     
-    if is_full_width:
-        # عرض صف مستقل تماماً للشهر (الأعمدة على اليمين والدوائر الـ 4 مفرودة بجانبها على اليسار)
-        bar_col, donuts_col = st.columns([1, 2.5], gap="large")
-        with bar_col:
-            st.caption(f"📊 {t['total_chart']}")
-            st.plotly_chart(total_bar_chart(period, actual, target, height=180),
-                            use_container_width=True, config={"displayModeBar": False, "staticPlot": True},
-                            key=f"{key}_bar")
-        with donuts_col:
-            st.caption(f"🎯 {t['product_perf']} · {period}")
-            cols = st.columns(4)
-            for col, product in zip(cols, PRODUCTS):
-                subset = data[data.Product == product]
-                with col:
-                    st.plotly_chart(donut(total(subset.Actual), total(subset.Target), product),
-                        use_container_width=True, config={"displayModeBar": False, "staticPlot": True},
-                        key=f"{key}_{product}")
-    else:
-        # للأقسام المزدوجة (النصف سنوي والربع سنوي): الأعمدة في الأعلى، وتتحت منها الدوائر الأربعة أفقياً لضمان عدم ضغطها أو قصها نهائياً
+    # قسم الأعمدة الإجمالية في الأعلى أو بجانب ملخص مصغر، ثم الدوائر الأربعة أفقياً بالكامل في الأسفل لمنحها مساحة كاملة تمنع أي قص
+    bar_col, info_col = st.columns([1, 1.8], gap="medium")
+    with bar_col:
         st.caption(f"📊 {t['total_chart']}")
-        st.plotly_chart(total_bar_chart(period, actual, target, height=200),
+        st.plotly_chart(total_bar_chart(period, actual, target, height=150),
                         use_container_width=True, config={"displayModeBar": False, "staticPlot": True},
                         key=f"{key}_bar")
+    with info_col:
+        st.markdown(f"<div style='padding-top:15px; font-size:12px; color:#102D50;'><b>💡 ملخص الأداء الإجمالي:</b> تم تحقيق <b>{pct(rate)}</b> من إجمالي المستهدف بقيمة فعلية تبلغ <b>{num(actual)}</b> مقابل مستهدف <b>{num(target)}</b>.</div>", unsafe_allow_html=True)
         
-        st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
-        st.caption(f"🎯 {t['product_perf']} · {period}")
-        cols = st.columns(4)
-        for col, product in zip(cols, PRODUCTS):
-            subset = data[data.Product == product]
-            with col:
-                st.plotly_chart(donut(total(subset.Actual), total(subset.Target), product),
-                    use_container_width=True, config={"displayModeBar": False, "staticPlot": True},
-                    key=f"{key}_{product}")
+    st.markdown(f"<p style='font-weight:bold; margin: 10px 0 2px 0; font-size:12px; color:#102D50;'>🎯 {t['product_perf']} · {period}</p>", unsafe_allow_html=True)
+    
+    # الدوائر الأربعة مرتبة أفقياً بشكل كامل وفسيح لمنع أي تداخل أو قص
+    cols = st.columns(4)
+    for col, product in zip(cols, PRODUCTS):
+        subset = data[data.Product == product]
+        with col:
+            st.plotly_chart(donut(total(subset.Actual), total(subset.Target), product),
+                use_container_width=True, config={"displayModeBar": False, "staticPlot": True},
+                key=f"{key}_{product}")
 
 def daily_data(sheets):
     name = next((n for n in sheets if n.strip().lower() == "sales report"), None)
@@ -376,20 +364,20 @@ st.markdown(f'<div class="section-heading">📈 {t["monthly"]} {year}</div>', un
 st.plotly_chart(monthly_chart(month_summary), use_container_width=True, config={"displayModeBar":False})
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# الصف الأول: النصف السنوي والربع السنوي بجانب بعضهما بتصميم مرتب يضمن اكتمال الدوائر تماماً
+# الصف الأول: النصف السنوي والربع السنوي بجانب بعضهما في خانات واسعة ومنظمة
 half_col, quarter_col = st.columns(2, gap="medium")
 with half_col:
     half = st.selectbox(t["select_half"], ["H1","H2"], index=1, key="half_choice")
-    render_panel(t["half"], half, year_data[year_data.Half == half], "half", is_full_width=False)
+    render_panel(t["half"], half, year_data[year_data.Half == half], "half")
 with quarter_col:
     quarter = st.selectbox(t["select_quarter"], ["Q1","Q2","Q3","Q4"], index=2, key="quarter_choice")
-    render_panel(t["quarter"], quarter, year_data[year_data.Quarter == quarter], "quarter", is_full_width=False)
+    render_panel(t["quarter"], quarter, year_data[year_data.Quarter == quarter], "quarter")
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# الصف الثاني: تحليل الشهر في خانة مستقلة بعرض كامل
+# الصف الثاني: تحليل الشهر في خانة مستقلة بعرض كامل ومريح
 month = st.selectbox(t["select_month"], MONTHS, index=10, key="month_choice")
-render_panel(t["month"], month, year_data[year_data.Month == month], "month", is_full_width=True)
+render_panel(t["month"], month, year_data[year_data.Month == month], "month")
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
