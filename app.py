@@ -216,28 +216,20 @@ def plot_monthly_target_vs_actual(monthly_df):
     fig.update_layout(barmode="group", plot_bgcolor=COLORS["white"], paper_bgcolor=COLORS["white"], font_color=COLORS["text"], margin=dict(l=20, r=20, t=40, b=20), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
     return fig
 
-def create_donut_chart(percentage, color):
-    display_val = min(max(percentage, 0), 100) if (percentage is not None and not pd.isna(percentage)) else 0
-    label_text = f"{percentage:.1f}%" if (percentage is not None and not pd.isna(percentage)) else "N/A"
-    fig = go.Figure(data=[go.Pie(values=[display_val, 100 - display_val], hole=0.75, marker_colors=[color, "#E2E8F0"], textinfo="none", hoverinfo="none", sort=False)])
-    fig.update_layout(showlegend=False, annotations=[dict(text=label_text, x=0.5, y=0.5, font_size=19, font_weight="bold", font_color=COLORS["text"], showarrow=False)], plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", margin=dict(l=5, r=5, t=5, b=5), height=150)
-    return fig
-
-# --- دوال التصميم الربعي الجديد المطابق للصورة ---
+# --- دوال التصميم الاحترافي المطابق للصورة الجديدة ---
 def plot_exploded_quarterly_donut(q_prod_df, total_q_ach):
-    # ترتيب الفئات وألوانها لمطابقة التصميم المرفق
     ordered_prods = ["Fluids", "DEO", "Syn", "Min"]
     labels_map = {
-        "Fluids": "Liquids (سائل)",
-        "DEO": "DEO (مزيل عرق)",
-        "Syn": "Syn (اصطناعي)",
+        "Fluids": "سائل (Liquids)",
+        "DEO": "مزيل عرق (DEO)",
+        "Syn": "اصطناعي (Syn)",
         "Min": "Min"
     }
     colors_map = {
-        "Fluids": "#00A6A6", # تيل / أخضر مزرق
-        "DEO": "#142B4A",    # أزرق داكن جداً
-        "Syn": "#2B6CB0",    # أزرق متوسط
-        "Min": "#F59E0B"     # برتقالي ذهبي
+        "Fluids": "#00A6A6", # سائل
+        "DEO": "#142B4A",    # مزيل عرق
+        "Syn": "#2B6CB0",    # اصطناعي
+        "Min": "#F59E0B"     # Min
     }
     
     vals = []
@@ -251,7 +243,6 @@ def plot_exploded_quarterly_donut(q_prod_df, total_q_ach):
         tgt = row["Target"].values[0] if (not row.empty and pd.notna(row["Target"].values[0])) else 0
         pct = row["Achievement %"].values[0] if (not row.empty and pd.notna(row["Achievement %"].values[0])) else 0
         
-        # نستخدم القيمة الفعلية أو المستهدفة إذا لم يسجل فعلي بعد حتى يظهر الشكل الدائري
         val_to_plot = act if act > 0 else (tgt if tgt > 0 else 1)
         vals.append(val_to_plot)
         labels.append(labels_map[p])
@@ -264,7 +255,7 @@ def plot_exploded_quarterly_donut(q_prod_df, total_q_ach):
         labels=labels,
         values=vals,
         hole=0.52,
-        pull=[0.06, 0.06, 0.06, 0.06], # فصل الشرائح (Exploded effect) مثل الصورة
+        pull=[0.06, 0.06, 0.06, 0.06],
         marker=dict(colors=colors, line=dict(color='#FFFFFF', width=2)),
         textinfo='label',
         textposition='outside',
@@ -384,27 +375,76 @@ if sheets_dict is not None:
             st.subheader(f"📈 نظرة عامة على الأداء الشهري لعام {selected_year}")
             st.plotly_chart(plot_monthly_target_vs_actual(m_summary), use_container_width=True, config={'displayModeBar': False})
 
-            # --- 3. دوائر الإنجاز ---
+            # --- 3. تصميم نسب تحقيق المستهدف حسب فئة المنتج (المطابق للصورة الجديدة) ---
             st.subheader("🎯 نسب تحقيق المستهدف حسب فئة المنتج")
-            year_prod_df = summarize_by_period(clean_df[(clean_df["Year"] == selected_year) & (clean_df["Quarter"].isin(selected_quarters))], ["Product"])
-            prod_colors = {"Min": COLORS["dark_blue"], "Syn": COLORS["orange"], "DEO": COLORS["teal"], "Fluids": COLORS["navy_blue"]}
-            d_cols = st.columns(4)
-            for idx, prod in enumerate(PRODUCTS):
-                row = year_prod_df[year_prod_df["Product"] == prod]
-                pct = row["Achievement %"].values[0] if not row.empty else np.nan
-                t_val = row["Target"].values[0] if not row.empty else 0
-                a_val = row["Actual"].values[0] if not row.empty else np.nan
-                with d_cols[idx]:
-                    st.markdown(f"<div style='background-color: white; padding: 12px; border-radius: 12px; text-align: center;'>", unsafe_allow_html=True)
-                    st.plotly_chart(create_donut_chart(pct, prod_colors[prod]), use_container_width=True, config={'displayModeBar': False})
-                    a_str = f"{a_val:,.2f}" if pd.notna(a_val) else "0.00"
-                    st.markdown(f"**فئة {prod}**<br><span style='font-size:12px; color:#555;'>الفعلي: {a_str} / المستهدف: {t_val:,.2f}</span></div>", unsafe_allow_html=True)
+            
+            # اختيار الربع أو العرض السنوي لهذه البطاقة
+            card_quarter_opt = st.selectbox("اختر الفترة لعرض البطاقة الاحترافية:", ["Q1", "Q2", "Q3", "Q4", "العام ككل"], index=0)
+            
+            if card_quarter_opt != "العام ككل":
+                q_months = {"Q1": ["Jan", "Feb", "Mar"], "Q2": ["Apr", "May", "Jun"], "Q3": ["Jul", "Aug", "Sep"], "Q4": ["Oct", "Nov", "Dec"]}[card_quarter_opt]
+                card_filtered_df = clean_df[(clean_df["Year"] == selected_year) & (clean_df["Quarter"] == card_quarter_opt) & (clean_df["Product"].isin(selected_products))]
+                card_title_text = f"أداء 4 منتجات ({card_quarter_opt}) : {selected_year}"
+            else:
+                q_months = VALID_MONTHS[:3] # افتراضي للرسم المصغر
+                card_filtered_df = clean_df[(clean_df["Year"] == selected_year) & (clean_df["Product"].isin(selected_products))]
+                card_title_text = f"أداء 4 منتجات (العام ككل) : {selected_year}"
+
+            card_prod_summary = summarize_by_period(card_filtered_df, ["Product"])
+            card_tot_target = card_filtered_df["Target"].sum()
+            card_tot_actual = card_filtered_df["Actual"].sum(min_count=1)
+            card_tot_ach = (card_tot_actual / card_tot_target * 100) if (pd.notna(card_tot_actual) and card_tot_target > 0) else np.nan
+
+            with st.container():
+                st.markdown(f"""
+                <div class="quarter-card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 12px; margin-bottom: 10px;">
+                        <h3 style="margin:0; color:#142B4A; font-size:22px;">{card_title_text}</h3>
+                        <div style="display:flex; gap:18px; font-size:14px; font-weight:bold; color:#263445;">
+                            <span><span style="display:inline-block; width:12px; height:12px; background-color:#142B4A; margin-left:6px; border-radius:2px;"></span>المستهدف</span>
+                            <span><span style="display:inline-block; width:12px; height:12px; background-color:#00A6A6; margin-left:6px; border-radius:2px;"></span>الفعلي</span>
+                            <span style="color:#00A6A6;">% الإنجاز: {f"{card_tot_ach:.1f}%" if pd.notna(card_tot_ach) else "0.0%"}</span>
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
+
+                donut_col, legend_col = st.columns([3, 1])
+                with donut_col:
+                    st.plotly_chart(plot_exploded_quarterly_donut(card_prod_summary, card_tot_ach), use_container_width=True, config={'displayModeBar': False})
+                with legend_col:
+                    st.markdown("""
+                    <div class="legend-box">
+                        <div class="legend-item"><span class="legend-color" style="background-color:#00A6A6;"></span> سائل (Liquids)</div>
+                        <div class="legend-item"><span class="legend-color" style="background-color:#142B4A;"></span> مزيل عرق (DEO)</div>
+                        <div class="legend-item"><span class="legend-color" style="background-color:#2B6CB0;"></span> اصطناعي (Syn)</div>
+                        <div class="legend-item"><span class="legend-color" style="background-color:#F59E0B;"></span> Min</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                b_col1, b_col2, b_col3 = st.columns(3)
+                
+                min_card_df = summarize_by_period(card_filtered_df[card_filtered_df["Product"] == "Min"], ["Month"])
+                with b_col1:
+                    st.markdown("<div style='text-align:center; font-size:12px; font-weight:bold; color:#475569;'>أداء فئة Min</div>", unsafe_allow_html=True)
+                    st.plotly_chart(plot_mini_quarter_bars(min_card_df, q_months), use_container_width=True, config={'displayModeBar': False})
+
+                tot_card_months_df = summarize_by_period(card_filtered_df, ["Month"])
+                with b_col2:
+                    st.markdown("<div style='text-align:center; font-size:12px; font-weight:bold; color:#475569;'>إجمالي المبيعات الشهرية</div>", unsafe_allow_html=True)
+                    st.plotly_chart(plot_mini_quarter_bars(tot_card_months_df, q_months), use_container_width=True, config={'displayModeBar': False})
+
+                other_card_df = summarize_by_period(card_filtered_df[card_filtered_df["Product"].isin(["Syn", "DEO", "Fluids"])], ["Month"])
+                with b_col3:
+                    st.markdown("<div style='text-align:center; font-size:12px; font-weight:bold; color:#475569;'>أداء (Syn + DEO + Fluids)</div>", unsafe_allow_html=True)
+                    st.plotly_chart(plot_mini_quarter_bars(other_card_df, q_months), use_container_width=True, config={'displayModeBar': False})
+
+                st.markdown("</div>", unsafe_allow_html=True)
 
             st.markdown("---")
 
-            # --- 4. تفاصيل المبيعات الشهرية عبر بطاقات دائرية للشهر المحدد ---
-            st.subheader(f"🔍 مقارنة منتجات الشهر المفصل (بطاقات نسب الإنجاز) - {selected_year}")
-            selected_single_month = st.selectbox("اختر الشهر لعرض دوائر نسب تحقيقه الكاملة:", VALID_MONTHS, index=0)
+            # --- 4. تفاصيل المبيعات الشهرية عبر بطاقات للشهر المحدد ---
+            st.subheader(f"🔍 مقارنة منتجات الشهر المفصل - {selected_year}")
+            selected_single_month = st.selectbox("اختر الشهر لعرض تفاصيله:", VALID_MONTHS, index=0)
             
             single_month_df = clean_df[
                 (clean_df["Year"] == selected_year) & 
@@ -424,20 +464,6 @@ if sheets_dict is not None:
             sm3.metric("نسبة تحقيق الشهر", f"{sm_ach:.1f}%" if pd.notna(sm_ach) else "—")
             sm4.metric("الفارق (Variance)", f"{sm_var:+,.2f}" if pd.notna(sm_var) else "—")
 
-            st.markdown(f"**نسب تحقيق المنتجات لشهر {selected_single_month}:**")
-            m_d_cols = st.columns(len(PRODUCTS))
-            for idx, prod in enumerate(PRODUCTS):
-                p_row = single_month_enriched[single_month_enriched["Product"] == prod]
-                p_pct = p_row["Achievement %"].values[0] if not p_row.empty else np.nan
-                p_t = p_row["Target"].values[0] if not p_row.empty else 0
-                p_a = p_row["Actual"].values[0] if not p_row.empty else np.nan
-                
-                with m_d_cols[idx]:
-                    st.markdown(f"<div style='background-color: white; padding: 12px; border-radius: 12px; text-align: center;'>", unsafe_allow_html=True)
-                    st.plotly_chart(create_donut_chart(p_pct, prod_colors[prod]), use_container_width=True, config={'displayModeBar': False})
-                    p_a_str = f"{p_a:,.2f}" if pd.notna(p_a) else "0.00"
-                    st.markdown(f"**{prod}**<br><span style='font-size:11px; color:#555;'>الفعلي: {p_a_str} <br> المستهدف: {p_t:,.2f}</span></div>", unsafe_allow_html=True)
-
             st.markdown("---")
 
             # --- 5. تفاصيل المبيعات اليومية ---
@@ -445,7 +471,7 @@ if sheets_dict is not None:
             daily_sheets = detect_daily_sales_data(sheets_dict)
 
             if not daily_sheets:
-                st.info("لم يتم العثور على شيت يحتوي على تواريخ يومية داخل الملف المرفوع. الشيتات المتوفرة في الملف هي: " + "، ".join(sheets_dict.keys()))
+                st.info("لم يتم العثور على شيت يحتوي على تواريخ يومية داخل الملف المرفوع.")
             else:
                 chosen_daily_sheet = st.selectbox("اختر شيت البيانات اليومية:", list(daily_sheets.keys()))
                 daily_df, date_col_name = daily_sheets[chosen_daily_sheet]
@@ -491,92 +517,13 @@ if sheets_dict is not None:
                     )
                     fig_daily.update_layout(plot_bgcolor=COLORS["white"], paper_bgcolor=COLORS["white"], xaxis_title="التاريخ", yaxis_title=val_col)
                     st.plotly_chart(fig_daily, use_container_width=True, config={'displayModeBar': False})
-
-                    with st.expander("عرض سجل الحركات اليومية التفصيلي"):
-                        st.dataframe(daily_year_df.drop(columns=["Parsed_Date", "Date_Only"], errors="ignore"), use_container_width=True)
                 else:
                     st.dataframe(daily_year_df.drop(columns=["Parsed_Date"], errors="ignore"), use_container_width=True)
 
             st.markdown("---")
 
-            # --- 6. التحليل الربعي الاحترافي (مطابق للتصميم المرفق) ---
+            # --- 6. التحليل الربعي ونصف السنوي والجداول ---
             st.subheader("🗓️ التحليل الربعي ونصف السنوي")
-            
-            q_select_col, _ = st.columns([1, 3])
-            with q_select_col:
-                target_quarter = st.selectbox("اختر الربع السنوي لعرض البطاقة التفصيلية:", ["Q1", "Q2", "Q3", "Q4"], index=0)
-
-            quarter_months_map = {
-                "Q1": ["Jan", "Feb", "Mar"],
-                "Q2": ["Apr", "May", "Jun"],
-                "Q3": ["Jul", "Aug", "Sep"],
-                "Q4": ["Oct", "Nov", "Dec"]
-            }
-            q_months = quarter_months_map[target_quarter]
-
-            q_specific_df = clean_df[
-                (clean_df["Year"] == selected_year) &
-                (clean_df["Quarter"] == target_quarter) &
-                (clean_df["Product"].isin(selected_products))
-            ].copy()
-
-            q_prod_summary = summarize_by_period(q_specific_df, ["Product"])
-            q_tot_target = q_specific_df["Target"].sum()
-            q_tot_actual = q_specific_df["Actual"].sum(min_count=1)
-            q_tot_ach = (q_tot_actual / q_tot_target * 100) if (pd.notna(q_tot_actual) and q_tot_target > 0) else np.nan
-
-            # إطار البطاقة البيضاء المطابق للصورة
-            with st.container():
-                st.markdown(f"""
-                <div class="quarter-card">
-                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 12px; margin-bottom: 10px;">
-                        <h3 style="margin:0; color:#142B4A; font-size:22px;">أداء 4 منتجات ({target_quarter}) : {selected_year}</h3>
-                        <div style="display:flex; gap:18px; font-size:14px; font-weight:bold; color:#263445;">
-                            <span><span style="display:inline-block; width:12px; height:12px; background-color:#142B4A; margin-left:6px; border-radius:2px;"></span>المستهدف</span>
-                            <span><span style="display:inline-block; width:12px; height:12px; background-color:#00A6A6; margin-left:6px; border-radius:2px;"></span>الفعلي</span>
-                            <span style="color:#00A6A6;">% الإنجاز: {f"{q_tot_ach:.1f}%" if pd.notna(q_tot_ach) else "0.0%"}</span>
-                        </div>
-                    </div>
-                """, unsafe_allow_html=True)
-
-                # القسم العلوي داخل البطاقة: الدائرة المجزأة + مفتاح الألوان الجانبي
-                donut_col, legend_col = st.columns([3, 1])
-                with donut_col:
-                    st.plotly_chart(plot_exploded_quarterly_donut(q_prod_summary, q_tot_ach), use_container_width=True, config={'displayModeBar': False})
-                with legend_col:
-                    st.markdown("""
-                    <div class="legend-box">
-                        <div class="legend-item"><span class="legend-color" style="background-color:#00A6A6;"></span> سائل (Fluids)</div>
-                        <div class="legend-item"><span class="legend-color" style="background-color:#142B4A;"></span> مزيل عرق (DEO)</div>
-                        <div class="legend-item"><span class="legend-color" style="background-color:#2B6CB0;"></span> اصطناعي (Syn)</div>
-                        <div class="legend-item"><span class="legend-color" style="background-color:#F59E0B;"></span> Min</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                # القسم السفلي داخل البطاقة: 3 رسوم بيانية مصغرة لأشهر الربع
-                b_col1, b_col2, b_col3 = st.columns(3)
-                
-                # الرسم المصغر 1: أداء المنتج الأساسي (Min) خلال أشهر الربع
-                min_q_df = summarize_by_period(q_specific_df[q_specific_df["Product"] == "Min"], ["Month"])
-                with b_col1:
-                    st.markdown("<div style='text-align:center; font-size:12px; font-weight:bold; color:#475569;'>أداء فئة Min</div>", unsafe_allow_html=True)
-                    st.plotly_chart(plot_mini_quarter_bars(min_q_df, q_months), use_container_width=True, config={'displayModeBar': False})
-
-                # الرسم المصغر 2: إجمالي الربع عبر الأشهر الثلاثة
-                tot_q_months_df = summarize_by_period(q_specific_df, ["Month"])
-                with b_col2:
-                    st.markdown("<div style='text-align:center; font-size:12px; font-weight:bold; color:#475569;'>إجمالي المبيعات الشهرية للربع</div>", unsafe_allow_html=True)
-                    st.plotly_chart(plot_mini_quarter_bars(tot_q_months_df, q_months), use_container_width=True, config={'displayModeBar': False})
-
-                # الرسم المصغر 3: أداء باقي الفئات (Syn + DEO + Fluids) خلال أشهر الربع
-                other_q_df = summarize_by_period(q_specific_df[q_specific_df["Product"].isin(["Syn", "DEO", "Fluids"])], ["Month"])
-                with b_col3:
-                    st.markdown("<div style='text-align:center; font-size:12px; font-weight:bold; color:#475569;'>أداء (Syn + DEO + Fluids)</div>", unsafe_allow_html=True)
-                    st.plotly_chart(plot_mini_quarter_bars(other_q_df, q_months), use_container_width=True, config={'displayModeBar': False})
-
-                st.markdown("</div>", unsafe_allow_html=True)
-
-            # جداول الملخص الربعي ونصف السنوي أسفل البطاقة
             q_summary = summarize_by_period(filtered_df, ["Quarter"])
             h_summary = summarize_by_period(filtered_df, ["Half"])
             t_col1, t_col2 = st.columns(2)
