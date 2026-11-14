@@ -27,7 +27,7 @@ COLORS = {
 PRODUCTS = ["Min", "Syn", "DEO", "Fluids"]
 VALID_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
-# تنسيق CSS (تمت إزالة الحدود والظلال الفارغة من البطاقات)
+# تنسيق CSS عام
 st.markdown("""
 <style>
 body { background-color: #F4F7FB; color: #263445; direction: rtl; text-align: right; }
@@ -210,11 +210,22 @@ def plot_monthly_target_vs_actual(monthly_df):
     fig.update_layout(barmode="group", plot_bgcolor=COLORS["white"], paper_bgcolor=COLORS["white"], font_color=COLORS["text"], margin=dict(l=20, r=20, t=40, b=20), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
     return fig
 
-def create_donut_chart(percentage, color):
+def create_donut_chart(percentage, color, product_name=""):
     display_val = min(max(percentage, 0), 100) if (percentage is not None and not pd.isna(percentage)) else 0
-    label_text = f"{percentage:.1f}%" if (percentage is not None and not pd.isna(percentage)) else "N/A"
+    pct_text = f"{percentage:.1f}%" if (percentage is not None and not pd.isna(percentage)) else "N/A"
+    
+    # دمج اسم المنتج مع نسبة الإنجاز داخل الدائرة ليظهر بشكل مرتب واحترافي
+    center_text = f"<b>{product_name}</b><br>{pct_text}" if product_name else f"<b>{pct_text}</b>"
+    
     fig = go.Figure(data=[go.Pie(values=[display_val, 100 - display_val], hole=0.75, marker_colors=[color, "#E2E8F0"], textinfo="none", hoverinfo="none", sort=False)])
-    fig.update_layout(showlegend=False, annotations=[dict(text=label_text, x=0.5, y=0.5, font_size=17, font_weight="bold", font_color=COLORS["text"], showarrow=False)], plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", margin=dict(l=5, r=5, t=5, b=5), height=130)
+    fig.update_layout(
+        showlegend=False, 
+        annotations=[dict(text=center_text, x=0.5, y=0.5, font_size=14, font_weight="bold", font_color=COLORS["text"], showarrow=False)], 
+        plot_bgcolor="rgba(0,0,0,0)", 
+        paper_bgcolor="rgba(0,0,0,0)", 
+        margin=dict(l=5, r=5, t=5, b=5), 
+        height=170
+    )
     return fig
 
 def convert_dfs_to_excel(sheets_dict):
@@ -283,7 +294,7 @@ if sheets_dict is not None:
             st.subheader(f"📈 نظرة عامة على الأداء الشهري لعام {selected_year}")
             st.plotly_chart(plot_monthly_target_vs_actual(m_summary), use_container_width=True, config={'displayModeBar': False})
 
-            # --- 3. نسب تحقيق المستهدف حسب المنتج والتحليل الربعي ---
+            # --- 3. نسب تحقيق المستهدف حسب المنتج والتحليل الربعي (ترتيب شبكي مربع 2×2 للدوائر) ---
             st.markdown("### 🎯 نسب تحقيق المستهدف حسب المنتج والتحليل الربعي")
             
             prod_colors = {
@@ -293,25 +304,30 @@ if sheets_dict is not None:
                 "Min": COLORS["dark_blue"]
             }
             
-            col_left, col_right = st.columns([2, 1])
+            col_left, col_right = st.columns([1.5, 1])
 
             with col_left:
                 st.markdown("##### نسب الإنجاز حسب المنتج")
-                d_cols = st.columns(4)
-                for idx, prod in enumerate(PRODUCTS):
-                    prod_filtered = clean_df[
-                        (clean_df["Year"] == selected_year) & 
-                        (clean_df["Quarter"].isin(selected_quarters)) & 
-                        (clean_df["Product"] == prod)
-                    ]
-                    p_target = prod_filtered["Target"].sum()
-                    p_actual = prod_filtered["Actual"].sum(min_count=1)
-                    p_pct = (p_actual / p_target * 100) if (pd.notna(p_actual) and p_target > 0) else np.nan
+                # تصميم شبكي مربع (2 × 2) متناسق واحترافي
+                for row_idx in range(2):
+                    d_cols = st.columns(2)
+                    for col_idx in range(2):
+                        prod_idx = row_idx * 2 + col_idx
+                        if prod_idx < len(PRODUCTS):
+                            prod = PRODUCTS[prod_idx]
+                            prod_filtered = clean_df[
+                                (clean_df["Year"] == selected_year) & 
+                                (clean_df["Quarter"].isin(selected_quarters)) & 
+                                (clean_df["Product"] == prod)
+                            ]
+                            p_target = prod_filtered["Target"].sum()
+                            p_actual = prod_filtered["Actual"].sum(min_count=1)
+                            p_pct = (p_actual / p_target * 100) if (pd.notna(p_actual) and p_target > 0) else np.nan
 
-                    with d_cols[idx]:
-                        st.plotly_chart(create_donut_chart(p_pct, prod_colors[prod]), use_container_width=True, config={'displayModeBar': False})
-                        a_str = f"{p_actual:,.2f}" if pd.notna(p_actual) else "0.00"
-                        st.markdown(f"<div style='text-align: center;'><strong>{prod}</strong><br><span style='font-size:11px; color:#555;'>الفعلي: {a_str}<br>المستهدف: {p_target:,.2f}</span></div>", unsafe_allow_html=True)
+                            with d_cols[col_idx]:
+                                st.plotly_chart(create_donut_chart(p_pct, prod_colors[prod], product_name=prod), use_container_width=True, config={'displayModeBar': False})
+                                a_str = f"{p_actual:,.2f}" if pd.notna(p_actual) else "0.00"
+                                st.markdown(f"<div style='text-align: center; margin-top: -10px; margin-bottom: 10px;'><span style='font-size:11px; color:#555;'>الفعلي: {a_str} | المستهدف: {p_target:,.2f}</span></div>", unsafe_allow_html=True)
 
             with col_right:
                 st.markdown("##### 🗓️ التحليل الربعي للأعمدة")
@@ -331,7 +347,7 @@ if sheets_dict is not None:
                     paper_bgcolor=COLORS["white"],
                     font_color=COLORS["text"],
                     margin=dict(l=10, r=10, t=10, b=10),
-                    height=240,
+                    height=350,
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10))
                 )
                 st.plotly_chart(fig_q, use_container_width=True, config={'displayModeBar': False})
@@ -369,9 +385,9 @@ if sheets_dict is not None:
                 p_a = p_row["Actual"].values[0] if not p_row.empty else np.nan
                 
                 with m_d_cols[idx]:
-                    st.plotly_chart(create_donut_chart(p_pct, prod_colors[prod]), use_container_width=True, config={'displayModeBar': False})
+                    st.plotly_chart(create_donut_chart(p_pct, prod_colors[prod], product_name=prod), use_container_width=True, config={'displayModeBar': False})
                     p_a_str = f"{p_a:,.2f}" if pd.notna(p_a) else "0.00"
-                    st.markdown(f"<div style='text-align: center;'><strong>{prod}</strong><br><span style='font-size:11px; color:#555;'>الفعلي: {p_a_str}<br>المستهدف: {p_t:,.2f}</span></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='text-align: center; margin-top: -10px;'><span style='font-size:11px; color:#555;'>الفعلي: {p_a_str} <br> المستهدف: {p_t:,.2f}</span></div>", unsafe_allow_html=True)
 
             st.markdown("---")
 
