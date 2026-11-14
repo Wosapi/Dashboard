@@ -223,29 +223,7 @@ def create_donut_chart(percentage, color):
     display_val = min(max(percentage, 0), 100) if (percentage is not None and not pd.isna(percentage)) else 0
     label_text = f"{percentage:.1f}%" if (percentage is not None and not pd.isna(percentage)) else "N/A"
     fig = go.Figure(data=[go.Pie(values=[display_val, 100 - display_val], hole=0.75, marker_colors=[color, "#E2E8F0"], textinfo="none", hoverinfo="none", sort=False)])
-    fig.update_layout(showlegend=False, annotations=[dict(text=label_text, x=0.5, y=0.5, font_size=17, font_weight="bold", font_color=COLORS["text"], showarrow=False)], plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", margin=dict(l=5, r=5, t=5, b=5), height=130)
-    return fig
-
-def plot_mini_trend(sub_df, color):
-    fig = go.Figure()
-    if sub_df is not None and not sub_df.empty:
-        fig.add_trace(go.Scatter(
-            x=sub_df["Month"], y=sub_df["Actual"],
-            mode="lines+markers",
-            line=dict(color=color, width=2.5),
-            marker=dict(size=5),
-            fill='tozeroy',
-            fillcolor=color.replace(")", ", 0.1)").replace("rgb", "rgba") if "rgb" in color else "#F1F5F9"
-        ))
-    fig.update_layout(
-        showlegend=False,
-        plot_bgcolor="rgba(0,0,0,0)",
-        paper_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=5, r=5, t=5, b=5),
-        height=55,
-        xaxis=dict(visible=False),
-        yaxis=dict(visible=False)
-    )
+    fig.update_layout(showlegend=False, annotations=[dict(text=label_text, x=0.5, y=0.5, font_size=17, font_weight="bold", font_color=COLORS["text"], showarrow=False)], plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", margin=dict(l=5, r=5, t=5, b=5), height=140)
     return fig
 
 def convert_dfs_to_excel(sheets_dict):
@@ -314,8 +292,8 @@ if sheets_dict is not None:
             st.subheader(f"📈 نظرة عامة على الأداء الشهري لعام {selected_year}")
             st.plotly_chart(plot_monthly_target_vs_actual(m_summary), use_container_width=True, config={'displayModeBar': False})
 
-            # --- 3. تصميم نسب تحقيق المستهدف حسب فئة المنتج (بطاقات مربعة) جنباً إلى جنب مع التحليل الربعي للأعمدة ---
-            st.markdown("### 🎯 نسب تحقيق المستهدف حسب فئة المنتج والتحليل الربعي")
+            # --- 3. نسب تحقيق المستهدف حسب المنتجات (دوائر فوق بعضها) جنباً إلى جنب مع التحليل الربعي للأعمدة ---
+            st.markdown("### 🎯 نسب تحقيق المستهدف حسب المنتج والتحليل الربعي")
             
             prod_colors = {
                 "Fluids": COLORS["navy_blue"],
@@ -324,11 +302,10 @@ if sheets_dict is not None:
                 "Min": COLORS["dark_blue"]
             }
             
-            # قسمنا الشاشة لجزأين جنباً إلى جنب (قسم الدوائر المربعة لأربع فئات + قسم تحليل الأعمدة الربعي)
             col_left, col_right = st.columns([2, 1])
 
             with col_left:
-                st.markdown("##### نسب الإنجاز حسب فئة المنتج")
+                st.markdown("##### نسب الإنجاز حسب المنتج")
                 d_cols = st.columns(4)
                 for idx, prod in enumerate(PRODUCTS):
                     prod_filtered = clean_df[
@@ -339,13 +316,16 @@ if sheets_dict is not None:
                     p_target = prod_filtered["Target"].sum()
                     p_actual = prod_filtered["Actual"].sum(min_count=1)
                     p_pct = (p_actual / p_target * 100) if (pd.notna(p_actual) and p_target > 0) else np.nan
-                    p_monthly_trend = summarize_by_period(prod_filtered, ["Month_Num", "Month"]).sort_values("Month_Num")
 
                     with d_cols[idx]:
                         st.markdown("<div class='product-card'>", unsafe_allow_html=True)
+                        # الدائرة الأولى فوق
                         st.plotly_chart(create_donut_chart(p_pct, prod_colors[prod]), use_container_width=True, config={'displayModeBar': False})
-                        st.markdown(f"**فئة {prod}**", unsafe_allow_html=True)
-                        st.plotly_chart(plot_mini_trend(p_monthly_trend, prod_colors[prod]), use_container_width=True, config={'displayModeBar': False})
+                        # اسم المنتج بدون كلمة فئة
+                        st.markdown(f"**{prod}**", unsafe_allow_html=True)
+                        # الدائرة الثانية تحتها مباشرة (مدمجة رأسياً)
+                        st.plotly_chart(create_donut_chart(p_pct, prod_colors[prod]), use_container_width=True, config={'displayModeBar': False})
+                        
                         a_str = f"{p_actual:,.2f}" if pd.notna(p_actual) else "0.00"
                         st.markdown(f"<span style='font-size:10px; color:#555;'>الفعلي: {a_str}<br>المستهدف: {p_target:,.2f}</span>", unsafe_allow_html=True)
                         st.markdown("</div>", unsafe_allow_html=True)
@@ -368,7 +348,7 @@ if sheets_dict is not None:
                     paper_bgcolor=COLORS["white"],
                     font_color=COLORS["text"],
                     margin=dict(l=10, r=10, t=10, b=10),
-                    height=270,
+                    height=290,
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10))
                 )
                 st.plotly_chart(fig_q, use_container_width=True, config={'displayModeBar': False})
@@ -472,7 +452,7 @@ if sheets_dict is not None:
 
             st.markdown("---")
 
-            # --- 7. الجداول التحليلية والتصدير ---
+            # --- 6. الجداول التحليلية والتصدير ---
             st.subheader("📋 الجداول التحليلية المفصلة")
             tab1, tab2, tab3, tab4 = st.tabs(["التفصيل الشهري العام", f"تفصيل شهر {selected_single_month}", "تفصيل المنتجات", "مقارنة السنوات"])
             with tab1: st.dataframe(m_summary.drop(columns=["Month_Num"]).style.format({"Target": "{:,.2f}", "Actual": "{:,.2f}", "Achievement %": "{:.1f}%"}, na_rep="—"), use_container_width=True)
