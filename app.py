@@ -257,7 +257,7 @@ if sheets_dict is not None:
             st.subheader(f"📈 نظرة عامة على الأداء الشهري لعام {selected_year}")
             st.plotly_chart(plot_monthly_target_vs_actual(m_summary), use_container_width=True, config={'displayModeBar': False})
 
-            # --- 3. نسب تحقيق المستهدف حسب فئة المنتج (تصميم الدوائر الأربع تماماً كالصورة المطلوبة) ---
+            # --- 3. تصميم نسب تحقيق المستهدف حسب فئة المنتج (المطابق للصورة المطلوبة تماماً) ---
             st.markdown("### 🎯 نسب تحقيق المستهدف حسب فئة المنتج")
             year_prod_df = summarize_by_period(clean_df[(clean_df["Year"] == selected_year) & (clean_df["Quarter"].isin(selected_quarters))], ["Product"])
             prod_colors = {"Min": COLORS["dark_blue"], "Syn": COLORS["orange"], "DEO": COLORS["teal"], "Fluids": COLORS["navy_blue"]}
