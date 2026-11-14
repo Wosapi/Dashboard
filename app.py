@@ -233,6 +233,7 @@ div[data-testid="stMetricValue"] {{
     display:inline-block;
 }}
 
+/* تنسيق القائمة المنسدلة داخل الحاوية الموحدة */
 div[data-testid="stSelectbox"] > div > div {{
     min-height: 42px;
     border-radius: 10px;
@@ -531,79 +532,81 @@ def monthly_chart(month_df):
 
 
 # =========================================================
-# 8. RENDER UNIFIED CARD PANEL WITH SELECTOR
+# 8. RENDER PANEL INSIDE A SINGLE UNIFIED CARD
 # =========================================================
 
 def render_panel_with_selector(title, options, default_idx, year_df, filter_col, key, icon="📊"):
-    # غلاف كارد موحد (خانة واحدة متكاملة)
-    st.markdown(f"""
-    <div style="background: white; border: 1px solid {C['border']}; border-radius: 12px; padding: 14px; margin-bottom: 15px; box-shadow: 0 2px 8px rgba(16,45,80,.05);">
-    """, unsafe_allow_html=True)
-
-    # صف العنوان وقائمة الاختيار مدمجان داخل نفس الإطار العلوي
-    c_title, c_select = st.columns([2.3, 1])
-    with c_title:
+    # حاوية رئيسية موحدة لتمثيل خانة واحدة متكاملة
+    with st.container():
         st.markdown(f"""
-        <div style="background: linear-gradient(100deg, {C['navy']}, {C['navy2']}); color: white; padding: 10px 14px; border-radius: 9px; font-weight: 750; display: flex; align-items: center; height: 42px; font-size: 0.95rem;">
-            {icon} {title}
-        </div>
+        <div style="background: white; border: 1px solid {C['border']}; border-radius: 12px; padding: 12px; box-shadow: 0 2px 8px rgba(16,45,80,.05); margin-bottom: 15px;">
         """, unsafe_allow_html=True)
-    with c_select:
-        selected_val = st.selectbox(
-            title,
-            options,
-            index=default_idx,
-            key=key,
-            label_visibility="collapsed"
-        )
 
-    sub_data = year_df[year_df[filter_col] == selected_val]
+        h_col, s_col = st.columns([2.3, 1], gap="small")
+        
+        with h_col:
+            # مؤشر مؤقت لقراءة القيمة الحالية من الـ session_state أو الافتراضية
+            current_val = st.session_state.get(key, options[default_idx])
+            st.markdown(
+                f'<div style="background:linear-gradient(100deg,{C["navy"]},{C["navy2"]}); color:white; padding:10px 14px; border-radius:8px; font-weight:750; height:42px; display:flex; align-items:center;">{icon} {title} ({current_val})</div>',
+                unsafe_allow_html=True
+            )
+            
+        with s_col:
+            selected_val = st.selectbox(
+                title,
+                options,
+                index=options.index(current_val) if current_val in options else default_idx,
+                key=key,
+                label_visibility="collapsed"
+            )
 
-    if sub_data.empty:
-        st.info(t["no_data"])
+        sub_data = year_df[year_df[filter_col] == selected_val]
+
+        if sub_data.empty:
+            st.info(t["no_data"])
+            st.markdown("</div>", unsafe_allow_html=True)
+            return selected_val
+
+        target = total(sub_data.Target)
+        actual = total(sub_data.Actual)
+        variance = actual - target if pd.notna(actual) and pd.notna(target) else np.nan
+        rate = actual / target * 100 if pd.notna(actual) and pd.notna(target) and target > 0 else np.nan
+
+        st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+        a, b, c, d = st.columns(4)
+        a.metric(t["variance"], num(variance))
+        b.metric(t["achievement"], pct(rate))
+        c.metric(t["actual"], num(actual))
+        d.metric(t["target"], num(target))
+
+        bar_col, donuts_col = st.columns([1, 1.4], gap="small")
+
+        with bar_col:
+            st.caption(f"📊 {t['total_chart']}")
+            st.plotly_chart(
+                total_bar_chart(selected_val, actual, target, height=238),
+                use_container_width=True,
+                config={"displayModeBar": False, "staticPlot": True},
+                key=f"{key}_bar"
+            )
+
+        with donuts_col:
+            st.caption(f"🎯 {t['product_perf']} · {selected_val}")
+            for products_row in (PRODUCTS[:2], PRODUCTS[2:]):
+                cols = st.columns(2, gap="small")
+                for col, product in zip(cols, products_row):
+                    subset = sub_data[sub_data.Product == product]
+                    with col:
+                        st.plotly_chart(
+                            donut(total(subset.Actual), total(subset.Target), product, compact=True),
+                            use_container_width=True,
+                            config={"displayModeBar": False, "staticPlot": True},
+                            key=f"{key}_{product}"
+                        )
+
         st.markdown("</div>", unsafe_allow_html=True)
         return selected_val
-
-    target = total(sub_data.Target)
-    actual = total(sub_data.Actual)
-    variance = actual - target if pd.notna(actual) and pd.notna(target) else np.nan
-    rate = actual / target * 100 if pd.notna(actual) and pd.notna(target) and target > 0 else np.nan
-
-    st.markdown("<div style='margin-top: 12px;'></div>", unsafe_allow_html=True)
-    a, b, c, d = st.columns(4)
-    a.metric(t["variance"], num(variance))
-    b.metric(t["achievement"], pct(rate))
-    c.metric(t["actual"], num(actual))
-    d.metric(t["target"], num(target))
-
-    st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
-    bar_col, donuts_col = st.columns([1, 1.4], gap="small")
-
-    with bar_col:
-        st.caption(f"📊 {t['total_chart']}")
-        st.plotly_chart(
-            total_bar_chart(selected_val, actual, target, height=238),
-            use_container_width=True,
-            config={"displayModeBar": False, "staticPlot": True},
-            key=f"{key}_bar"
-        )
-
-    with donuts_col:
-        st.caption(f"🎯 {t['product_perf']} · {selected_val}")
-        for products_row in (PRODUCTS[:2], PRODUCTS[2:]):
-            cols = st.columns(2, gap="small")
-            for col, product in zip(cols, products_row):
-                subset = sub_data[sub_data.Product == product]
-                with col:
-                    st.plotly_chart(
-                        donut(total(subset.Actual), total(subset.Target), product, compact=True),
-                        use_container_width=True,
-                        config={"displayModeBar": False, "staticPlot": True},
-                        key=f"{key}_{product}"
-                    )
-
-    st.markdown("</div>", unsafe_allow_html=True)
-    return selected_val
 
 
 # =========================================================
@@ -838,7 +841,7 @@ st.markdown("<hr>", unsafe_allow_html=True)
 
 
 # =========================================================
-# 19. HALF-YEAR AND QUARTER ANALYSIS (UNIFIED CARDS)
+# 19. HALF-YEAR AND QUARTER ANALYSIS (INSIDE CARDS)
 # =========================================================
 
 half_col, quarter_col = st.columns(2, gap="medium")
@@ -886,7 +889,7 @@ with month_col:
     )
 
 with daily_col:
-    st.markdown(f'<div class="section-heading" style="margin-bottom: 12px; height: 42px; display: flex; align-items: center;">📋 {t["daily"]}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="panel-heading">📋 {t["daily"]}</div>', unsafe_allow_html=True)
     daily_df, daily_error = daily_data_from_sheet(sheets)
 
     if daily_error:
