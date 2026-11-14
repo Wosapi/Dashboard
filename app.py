@@ -4,14 +4,29 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-st.set_page_config(page_title="Advanced Sales Performance Dashboard", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(
+    page_title="Advanced Sales Performance Dashboard",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
+# لوحة ألوان تنفيذية فاخرة
 C = {
-    "navy": "#102D50", "navy2": "#173B63", "teal": "#0FA69E",
-    "orange": "#E99A16", "blue": "#2873D8", "bg": "#F3F7FC",
-    "white": "#FFFFFF", "text": "#142B46", "muted": "#334155",
-    "border": "#DCE5EF", "red": "#DC3F43", "gray": "#E7EDF4",
+    "navy": "#0F294A",
+    "navy_light": "#1E3A5F",
+    "teal": "#0D9488",
+    "orange": "#D97706",
+    "blue": "#2563EB",
+    "bg": "#F4F7FB",
+    "white": "#FFFFFF",
+    "text": "#0F172A",
+    "muted": "#475569",
+    "border": "#E2E8F0",
+    "red": "#DC2626",
+    "track": "#E2E8F0",
 }
+
 PRODUCTS = ["Min", "Syn", "DEO", "Fluids"]
 PCOLORS = {"Min": C["navy"], "Syn": C["orange"], "DEO": C["teal"], "Fluids": C["blue"]}
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -19,53 +34,139 @@ MONTH_AR = dict(zip(MONTHS, ["يناير", "فبراير", "مارس", "أبري
 
 TEXT = {
     "ar": {
-        "title": "لوحة تحكم الأداء البيعي المتقدم", "subtitle": "تحليل شامل للمستهدف والمبيعات الفعلية",
-        "data": "📂 مصدر البيانات", "upload": "ارفع ملف Excel", "filters": "🎛️ الفلاتر التفاعلية",
-        "year": "السنة", "products": "المنتجات", "quarters": "الأرباع",
-        "target": "المستهدف", "actual": "الفعلي", "achievement": "معدل الإنجاز",
-        "remaining": "المتبقي", "best_month": "أفضل شهر", "best_product": "أفضل منتج",
-        "monthly": "الأداء الشهري لعام", "half": "تحليل النصف السنوي",
-        "quarter": "تحليل الربع السنوي", "month": "تحليل الشهر", "variance": "الفرق",
-        "product_perf": "أداء المنتجات", "total_chart": "الإجمالي (فعلي مقابل مستهدف)",
-        "daily": "تحليل المبيعات اليومية", "tables": "الجداول التحليلية", "export": "تصدير التقارير",
-        "download": "تحميل التقرير الشامل (Excel)", "no_data": "لا توجد بيانات متاحة لهذه الفترة.",
-        "select_half": "اختر النصف", "select_quarter": "اختر الربع", "select_month": "اختر الشهر",
-        "daily_year": "السنة", "daily_month": "الشهر", "value_col": "عمود المبيعات",
-        "all": "الكل", "na": "غير متاح",
+        "title": "لوحة تحكم الأداء البيعي المتقدم",
+        "subtitle": "تحليل شامل للمستهدف والمبيعات الفعلية",
+        "data": "📂 مصدر البيانات",
+        "upload": "ارفع ملف Excel",
+        "filters": "🎛️ الفلاتر التفاعلية",
+        "year": "السنة",
+        "products": "المنتجات",
+        "quarters": "الأرباع",
+        "target": "المستهدف",
+        "actual": "الفعلي",
+        "achievement": "معدل الإنجاز",
+        "remaining": "المتبقي",
+        "best_month": "أفضل شهر",
+        "best_product": "أفضل منتج",
+        "monthly": "الأداء الشهري لعام",
+        "half": "تحليل النصف السنوي",
+        "quarter": "تحليل الربع السنوي",
+        "month": "تحليل الشهر",
+        "variance": "الفرق",
+        "product_perf": "أداء المنتجات",
+        "total_chart": "الإجمالي (فعلي مقابل مستهدف)",
+        "daily": "تحليل المبيعات اليومية",
+        "tables": "الجداول التحليلية",
+        "export": "تصدير التقارير",
+        "download": "تحميل التقرير الشامل (Excel)",
+        "no_data": "لا توجد بيانات متاحة لهذه الفترة.",
+        "select_half": "اختر النصف",
+        "select_quarter": "اختر الربع",
+        "select_month": "اختر الشهر",
+        "daily_year": "السنة",
+        "daily_month": "الشهر",
+        "value_col": "عمود المبيعات",
+        "all": "الكل",
+        "na": "غير متاح",
     },
     "en": {
-        "title": "Advanced Sales Performance Dashboard", "subtitle": "Comprehensive analysis of targets and actual sales",
-        "data": "📂 Data Source", "upload": "Upload Excel file", "filters": "🎛️ Interactive Filters",
-        "year": "Year", "products": "Products", "quarters": "Quarters",
-        "target": "Target", "actual": "Actual", "achievement": "Achievement",
-        "remaining": "Remaining", "best_month": "Best Month", "best_product": "Best Product",
-        "monthly": "Monthly Performance for", "half": "Half-Year Analysis",
-        "quarter": "Quarter Analysis", "month": "Month Analysis", "variance": "Variance",
-        "product_perf": "Products Performance", "total_chart": "Total (Actual vs Target)",
-        "daily": "Daily Sales Breakdown", "tables": "Detailed Analytical Tables", "export": "Export Reports",
-        "download": "Download Comprehensive Report (Excel)", "no_data": "No data available for this period.",
-        "select_half": "Select half-year", "select_quarter": "Select quarter", "select_month": "Select month",
-        "daily_year": "Year", "daily_month": "Month", "value_col": "Sales column",
-        "all": "All", "na": "N/A",
+        "title": "Advanced Sales Performance Dashboard",
+        "subtitle": "Comprehensive analysis of targets and actual sales",
+        "data": "📂 Data Source",
+        "upload": "Upload Excel file",
+        "filters": "🎛️ Interactive Filters",
+        "year": "Year",
+        "products": "Products",
+        "quarters": "Quarters",
+        "target": "Target",
+        "actual": "Actual",
+        "achievement": "Achievement",
+        "remaining": "Remaining",
+        "best_month": "Best Month",
+        "best_product": "Best Product",
+        "monthly": "Monthly Performance for",
+        "half": "Half-Year Analysis",
+        "quarter": "Quarter Analysis",
+        "month": "Month Analysis",
+        "variance": "Variance",
+        "product_perf": "Products Performance",
+        "total_chart": "Total (Actual vs Target)",
+        "daily": "Daily Sales Breakdown",
+        "tables": "Detailed Analytical Tables",
+        "export": "Export Reports",
+        "download": "Download Comprehensive Report (Excel)",
+        "no_data": "No data available for this period.",
+        "select_half": "Select half-year",
+        "select_quarter": "Select quarter",
+        "select_month": "Select month",
+        "daily_year": "Year",
+        "daily_month": "Month",
+        "value_col": "Sales column",
+        "all": "All",
+        "na": "N/A",
     },
 }
 
+# تنسيق CSS احترافي متجاوب
 st.markdown(f"""
 <style>
-.stApp {{background:{C['bg']}; color:{C['text']};}}
-.block-container {{max-width:1600px; padding:1rem 1.25rem 2rem;}}
-h1,h2,h3,h4 {{color:{C['text']};}}
-div[data-testid="stMetric"] {{background:white;border:1px solid {C['border']};border-radius:12px;padding:10px 12px;box-shadow:0 2px 8px rgba(16,45,80,.05);min-height:84px;}}
-div[data-testid="stMetricLabel"] {{color:{C['muted']};font-weight:650;font-size:.78rem;}}
-div[data-testid="stMetricValue"] {{color:{C['navy']};font-weight:750;font-size:clamp(1.1rem,1.8vw,1.65rem);}}
-.dashboard-header {{background:linear-gradient(112deg,#0C2747 0%,#173B63 68%,#0E8294 100%);border-radius:15px;padding:18px 24px;color:white;margin-bottom:15px;box-shadow:0 5px 16px rgba(16,45,80,.14);display:flex;justify-content:space-between;align-items:center;gap:12px;}}
-.dashboard-header h1 {{color:white!important;margin:0;font-size:clamp(1.2rem,2.4vw,2rem);}}
-.dashboard-header p {{color:#D6E4F1;margin:4px 0 0;font-size:.9rem;}}
-.year-pill {{color:white;font-weight:750;white-space:nowrap;padding:8px 12px;border:1px solid #ffffff38;border-radius:10px;background:#ffffff12;}}
-.section-heading {{background:linear-gradient(100deg,{C['navy']},{C['navy2']});color:white;padding:10px 14px;border-radius:11px;margin:4px 0 10px;font-size:1rem;font-weight:750;}}
-.panel-heading {{background:linear-gradient(100deg,{C['navy']},{C['navy2']});color:white;padding:10px 12px;border-radius:10px;margin:3px 0 10px;font-weight:750;min-height:44px;}}
-hr {{border:0;border-top:1px solid {C['border']};margin:0.85rem 0;}}
-@media(max-width:700px) {{.block-container{{padding:.6rem .55rem 1.5rem;}} .dashboard-header{{padding:13px;}}}}
+.stApp {{ background-color: {C['bg']}; color: {C['text']}; }}
+.block-container {{ max-width: 1550px; padding: 1rem 1.2rem 2rem; }}
+div[data-testid="stMetric"] {{
+    background: {C['white']};
+    border: 1px solid {C['border']};
+    border-radius: 12px;
+    padding: 12px 14px;
+    box-shadow: 0 2px 6px rgba(15, 41, 74, 0.04);
+}}
+div[data-testid="stMetricLabel"] {{ color: {C['muted']}; font-weight: 700; font-size: 0.8rem; }}
+div[data-testid="stMetricValue"] {{ color: {C['navy']}; font-weight: 800; font-size: clamp(1.15rem, 1.8vw, 1.65rem); }}
+.dashboard-header {{
+    background: linear-gradient(120deg, #0F294A 0%, #1E3A5F 60%, #0D9488 100%);
+    border-radius: 14px;
+    padding: 18px 24px;
+    color: white;
+    margin-bottom: 16px;
+    box-shadow: 0 4px 14px rgba(15, 41, 74, 0.12);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}}
+.dashboard-header h1 {{ color: white !important; margin: 0; font-size: clamp(1.2rem, 2.2vw, 1.85rem); }}
+.dashboard-header p {{ color: #CBD5E1; margin: 4px 0 0; font-size: 0.88rem; }}
+.year-pill {{
+    color: white; font-weight: 700; padding: 7px 14px;
+    border: 1px solid rgba(255,255,255,0.25); border-radius: 10px;
+    background: rgba(255,255,255,0.1);
+}}
+.panel-heading {{
+    background: linear-gradient(90deg, {C['navy']}, {C['navy_light']});
+    color: white; padding: 10px 16px; border-radius: 10px;
+    margin: 4px 0 12px; font-weight: 700; font-size: 0.98rem;
+}}
+.donut-card {{
+    background: {C['white']};
+    border: 1px solid {C['border']};
+    border-radius: 12px;
+    padding: 12px 8px;
+    text-align: center;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.02);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}}
+.donut-values {{
+    margin-top: 8px;
+    font-size: 12px;
+    line-height: 1.45;
+    width: 100%;
+    border-top: 1px solid {C['border']};
+    padding-top: 6px;
+}}
+.val-actual {{ color: {C['navy']}; font-weight: 800; display: block; }}
+.val-target {{ color: {C['muted']}; font-weight: 600; font-size: 11px; display: block; }}
+hr {{ border: 0; border-top: 1px solid {C['border']}; margin: 1.1rem 0; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -165,57 +266,59 @@ def num(v):
 def pct(v):
     return "—" if pd.isna(v) else f"{v:.1f}%"
 
-# دوائر متناسقة وكاملة 100% بدون أي قص مع هوامش أمان كاملة
-def donut(actual, target, product):
+# دالة SVG احترافية لرسم الدائرة كاملة 100% بدون أي قص وبخط واضح جداً
+def render_svg_donut(actual, target, product):
     valid = pd.notna(actual) and pd.notna(target) and target > 0
-    rate = actual / target * 100 if valid else 0
-    ring = min(max(rate, 0), 100)
-    label = f"{rate:.1f}%" if valid else "N/A"
+    rate = (actual / target * 100) if valid else 0
+    ring_pct = min(max(rate, 0), 100)
+    label_pct = f"{rate:.1f}%" if valid else "N/A"
+    color = PCOLORS[product]
     
-    fig = go.Figure(go.Pie(
-        values=[max(ring, .001), max(100-ring, .001)], hole=.66, sort=False,
-        marker=dict(colors=[PCOLORS[product], C["gray"]], line=dict(color="white", width=2)),
-        textinfo="none", hovertemplate=f"{product}<br>{label}<extra></extra>"
-    ))
+    # حسابات هندسية دقيقة لمحيط الدائرة (نصف القطر = 42)
+    radius = 42
+    circumference = 2 * 3.14159 * radius
+    stroke_dashoffset = circumference - (ring_pct / 100.0) * circumference
     
-    fig.add_annotation(
-        x=0.5, y=0.53,
-        text=f"<b>{product}</b><br><b style='font-size:12.5px; color:#102D50;'>{label}</b>",
-        showarrow=False, font=dict(size=10, color=C["text"])
-    )
+    act_lbl = t["actual"]
+    tgt_lbl = t["target"]
     
-    fig.add_annotation(
-        x=0.5, y=-0.32,
-        text=f"<b style='color:#0F172A; font-size:10px;'>الفعلي: {num(actual)}</b><br><b style='color:#475569; font-size:9.5px;'>المستهدف: {num(target)}</b>",
-        showarrow=False, font=dict(size=9.5), xref="paper", yref="paper"
-    )
-    
-    fig.update_layout(
-        height=155, showlegend=False,
-        margin=dict(l=18, r=18, t=10, b=36),
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
-    )
-    return fig
+    html = f"""
+    <div class="donut-card">
+        <svg width="110" height="110" viewBox="0 0 110 110">
+            <circle cx="55" cy="55" r="{radius}" fill="transparent" stroke="{C['track']}" stroke-width="11" />
+            <circle cx="55" cy="55" r="{radius}" fill="transparent" stroke="{color}" stroke-width="11"
+                    stroke-dasharray="{circumference}" stroke-dashoffset="{stroke_dashoffset}"
+                    stroke-linecap="round" transform="rotate(-90 55 55)" />
+            <text x="55" y="49" text-anchor="middle" fill="{C['muted']}" font-size="12" font-weight="700" font-family="sans-serif">{product}</text>
+            <text x="55" y="67" text-anchor="middle" fill="{C['navy']}" font-size="15" font-weight="800" font-family="sans-serif">{label_pct}</text>
+        </svg>
+        <div class="donut-values">
+            <span class="val-actual">{act_lbl}: {num(actual)}</span>
+            <span class="val-target">{tgt_lbl}: {num(target)}</span>
+        </div>
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
 
-# أعمدة إجمالي الفترة
-def total_bar_chart(period_label, actual, target, height=210):
+# رسم الأعمدة الإجمالية (فعلي مقابل مستهدف بدون منتجات)
+def total_bar_chart(period_label, actual, target, height=225):
     fig = go.Figure()
     fig.add_bar(
         x=[period_label], y=[target if pd.notna(target) else 0],
         name=t["target"], marker_color=C["navy"],
-        text=[num(target)], textposition="auto", textfont=dict(size=11, color="white")
+        text=[num(target)], textposition="auto", textfont=dict(size=12, color="white")
     )
     fig.add_bar(
         x=[period_label], y=[actual if pd.notna(actual) else 0],
         name=t["actual"], marker_color=C["teal"],
-        text=[num(actual)], textposition="auto", textfont=dict(size=11, color="white")
+        text=[num(actual)], textposition="auto", textfont=dict(size=12, color="white")
     )
     fig.update_layout(
-        barmode="group", height=height, margin=dict(l=6, r=6, t=22, b=6),
-        plot_bgcolor="white", paper_bgcolor="white", font=dict(color=C["text"], size=10),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=9.5)),
+        barmode="group", height=height, margin=dict(l=10, r=10, t=28, b=10),
+        plot_bgcolor="white", paper_bgcolor="white", font=dict(color=C["text"], size=11),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10)),
         xaxis=dict(showgrid=False), yaxis=dict(rangemode="tozero", gridcolor=C["gray"]),
-        bargap=0.3, bargroupgap=0.1
+        bargap=0.35, bargroupgap=0.12
     )
     return fig
 
@@ -228,15 +331,15 @@ def monthly_chart(month_df):
     fig.add_bar(x=base.Month, y=base.Actual, name=t["actual"], marker_color=C["teal"],
                 text=base.Actual.map(lambda v: "" if pd.isna(v) else f"{v:.2f}"), textposition="inside",
                 textfont=dict(color="white", size=10))
-    fig.update_layout(barmode="group", height=275, margin=dict(l=12,r=12,t=12,b=8),
+    fig.update_layout(barmode="group", height=280, margin=dict(l=12,r=12,t=15,b=10),
         plot_bgcolor="white", paper_bgcolor="white", font=dict(color=C["text"],size=11),
         legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="right",x=1),
         xaxis=dict(showgrid=False), yaxis=dict(rangemode="tozero",gridcolor=C["gray"]),
         bargap=.22, bargroupgap=.08)
     return fig
 
-# دالة رسم الخانة بتصميم مرتب ومنع القصور نهائياً
-def render_panel(title, period, data, key):
+# دالة بناء كل قسم بتصميم متكامل ومتوازن
+def render_panel(title, period, data, key, is_full_row=False):
     st.markdown(f'<div class="panel-heading">📊 {title} ({period})</div>', unsafe_allow_html=True)
     if data.empty:
         st.info(t["no_data"])
@@ -245,34 +348,51 @@ def render_panel(title, period, data, key):
     variance = actual - target if pd.notna(actual) and pd.notna(target) else np.nan
     rate = actual / target * 100 if pd.notna(actual) and pd.notna(target) and target > 0 else np.nan
     
+    # البطاقات الأربع العلوية
     a, b, c, d = st.columns(4)
     a.metric(t["variance"], num(variance))
     b.metric(t["achievement"], pct(rate))
     c.metric(t["actual"], num(actual))
     d.metric(t["target"], num(target))
     
-    st.markdown("<div style='height:4px;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
     
-    # قسم الأعمدة الإجمالية في الأعلى أو بجانب ملخص مصغر، ثم الدوائر الأربعة أفقياً بالكامل في الأسفل لمنحها مساحة كاملة تمنع أي قص
-    bar_col, info_col = st.columns([1, 1.8], gap="medium")
-    with bar_col:
-        st.caption(f"📊 {t['total_chart']}")
-        st.plotly_chart(total_bar_chart(period, actual, target, height=150),
-                        use_container_width=True, config={"displayModeBar": False, "staticPlot": True},
-                        key=f"{key}_bar")
-    with info_col:
-        st.markdown(f"<div style='padding-top:15px; font-size:12px; color:#102D50;'><b>💡 ملخص الأداء الإجمالي:</b> تم تحقيق <b>{pct(rate)}</b> من إجمالي المستهدف بقيمة فعلية تبلغ <b>{num(actual)}</b> مقابل مستهدف <b>{num(target)}</b>.</div>", unsafe_allow_html=True)
-        
-    st.markdown(f"<p style='font-weight:bold; margin: 10px 0 2px 0; font-size:12px; color:#102D50;'>🎯 {t['product_perf']} · {period}</p>", unsafe_allow_html=True)
-    
-    # الدوائر الأربعة مرتبة أفقياً بشكل كامل وفسيح لمنع أي تداخل أو قص
-    cols = st.columns(4)
-    for col, product in zip(cols, PRODUCTS):
-        subset = data[data.Product == product]
-        with col:
-            st.plotly_chart(donut(total(subset.Actual), total(subset.Target), product),
-                use_container_width=True, config={"displayModeBar": False, "staticPlot": True},
-                key=f"{key}_{product}")
+    if is_full_row:
+        # في الصف المستقل (تحليل الشهر): العمود الإجمالي بجانب الدوائر الأربعة في سطر واحد
+        col_bar, col_donuts = st.columns([1, 2.6], gap="medium")
+        with col_bar:
+            st.caption(f"📊 {t['total_chart']}")
+            st.plotly_chart(total_bar_chart(period, actual, target, height=205),
+                            use_container_width=True, config={"displayModeBar": False, "staticPlot": True},
+                            key=f"{key}_bar")
+        with col_donuts:
+            st.caption(f"🎯 {t['product_perf']} · {period}")
+            d_cols = st.columns(4, gap="small")
+            for col, product in zip(d_cols, PRODUCTS):
+                subset = data[data.Product == product]
+                with col:
+                    render_svg_donut(total(subset.Actual), total(subset.Target), product)
+    else:
+        # في النصف سنوي والربع سنوي: العمود الإجمالي بجانب شبكة 2×2 من الدوائر الاحترافية
+        col_bar, col_donuts = st.columns([1, 1.8], gap="medium")
+        with col_bar:
+            st.caption(f"📊 {t['total_chart']}")
+            st.plotly_chart(total_bar_chart(period, actual, target, height=340),
+                            use_container_width=True, config={"displayModeBar": False, "staticPlot": True},
+                            key=f"{key}_bar")
+        with col_donuts:
+            st.caption(f"🎯 {t['product_perf']} · {period}")
+            row1 = st.columns(2, gap="small")
+            for col, product in zip(row1, PRODUCTS[:2]):
+                subset = data[data.Product == product]
+                with col:
+                    render_svg_donut(total(subset.Actual), total(subset.Target), product)
+            st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
+            row2 = st.columns(2, gap="small")
+            for col, product in zip(row2, PRODUCTS[2:]):
+                subset = data[data.Product == product]
+                with col:
+                    render_svg_donut(total(subset.Actual), total(subset.Target), product)
 
 def daily_data(sheets):
     name = next((n for n in sheets if n.strip().lower() == "sales report"), None)
@@ -296,7 +416,7 @@ def excel_bytes(sheet_map):
             frame.to_excel(writer, sheet_name=name[:31], index=False)
     return output.getvalue()
 
-# File uploader
+# القائمة الجانبية لرفع الملف
 st.sidebar.header(t["data"])
 uploaded = st.sidebar.file_uploader(t["upload"], type=["xlsx", "xls", "xlsb"])
 if uploaded is None:
@@ -321,7 +441,7 @@ if data is None or data.empty:
     st.error("تعذر قراءة شيت Target. تأكد من وجود أسماء المنتجات Min وSyn في صف العناوين.")
     st.stop()
 
-# Sidebar filters
+# الفلاتر الجانبية
 years = sorted(data.Year.dropna().unique().tolist())
 st.sidebar.header(t["filters"])
 year = st.sidebar.selectbox(t["year"], years, index=len(years)-1)
@@ -340,7 +460,7 @@ st.markdown(f"""
 year_data = data[(data.Year == year) & data.Product.isin(chosen_products)].copy()
 filtered = year_data[year_data.Quarter.isin(chosen_quarters)].copy()
 
-# Executive KPIs
+# المؤشرات التنفيذية العلوية
 target_total, actual_total = total(filtered.Target), total(filtered.Actual)
 achievement = actual_total/target_total*100 if pd.notna(actual_total) and pd.notna(target_total) and target_total > 0 else np.nan
 remaining = target_total-actual_total if pd.notna(actual_total) and pd.notna(target_total) else np.nan
@@ -360,29 +480,29 @@ k[4].metric(t["best_month"], MONTH_AR.get(best_month,best_month) if lang=="ar" e
 k[5].metric(t["best_product"], best_product)
 
 st.markdown("<hr>", unsafe_allow_html=True)
-st.markdown(f'<div class="section-heading">📈 {t["monthly"]} {year}</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="panel-heading">📈 {t["monthly"]} {year}</div>', unsafe_allow_html=True)
 st.plotly_chart(monthly_chart(month_summary), use_container_width=True, config={"displayModeBar":False})
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# الصف الأول: النصف السنوي والربع السنوي بجانب بعضهما في خانات واسعة ومنظمة
-half_col, quarter_col = st.columns(2, gap="medium")
+# الصف الأول: تحليل النصف السنوي والربع السنوي
+half_col, quarter_col = st.columns(2, gap="large")
 with half_col:
-    half = st.selectbox(t["select_half"], ["H1","H2"], index=1, key="half_choice")
-    render_panel(t["half"], half, year_data[year_data.Half == half], "half")
+    half = st.selectbox(t["select_half"], ["H1","H2"], index=0, key="half_choice")
+    render_panel(t["half"], half, year_data[year_data.Half == half], "half", is_full_row=False)
 with quarter_col:
     quarter = st.selectbox(t["select_quarter"], ["Q1","Q2","Q3","Q4"], index=2, key="quarter_choice")
-    render_panel(t["quarter"], quarter, year_data[year_data.Quarter == quarter], "quarter")
+    render_panel(t["quarter"], quarter, year_data[year_data.Quarter == quarter], "quarter", is_full_row=False)
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# الصف الثاني: تحليل الشهر في خانة مستقلة بعرض كامل ومريح
+# الصف الثاني: تحليل الشهر في صف مستقل بعرض كامل
 month = st.selectbox(t["select_month"], MONTHS, index=10, key="month_choice")
-render_panel(t["month"], month, year_data[year_data.Month == month], "month")
+render_panel(t["month"], month, year_data[year_data.Month == month], "month", is_full_row=True)
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# Daily sales, if a dated Sales Report sheet exists.
-st.markdown(f'<div class="section-heading">📅 {t["daily"]}</div>', unsafe_allow_html=True)
+# قسم المبيعات اليومية
+st.markdown(f'<div class="panel-heading">📅 {t["daily"]}</div>', unsafe_allow_html=True)
 daily = daily_data(sheets)
 if daily is not None and not daily.empty:
     daily_years = sorted(daily.Parsed_Date.dt.year.dropna().unique().tolist())
@@ -410,7 +530,7 @@ else:
     st.caption("لم يتم العثور على بيانات يومية قابلة للقراءة في شيت Sales Report.")
 
 st.markdown("<hr>", unsafe_allow_html=True)
-st.markdown(f'<div class="section-heading">📋 {t["tables"]}</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="panel-heading">📋 {t["tables"]}</div>', unsafe_allow_html=True)
 tab1,tab2,tab3 = st.tabs(["Monthly Summary","Products Breakdown","Yearly Comparison"])
 with tab1:
     st.dataframe(month_summary.drop(columns=["Month_Num"],errors="ignore").style.format(
@@ -427,7 +547,7 @@ with tab3:
         {"Target":"{:,.2f}","Actual":"{:,.2f}","Variance":"{:,.2f}","Remaining":"{:,.2f}","Achievement %":"{:.1f}%"},
         na_rep="—"),use_container_width=True,hide_index=True)
 
-st.markdown(f'<div class="section-heading">📥 {t["export"]}</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="panel-heading">📥 {t["export"]}</div>', unsafe_allow_html=True)
 exports = {
     "Monthly_Summary": month_summary.drop(columns=["Month_Num"],errors="ignore"),
     "Half_Year": summary(year_data,["Half"]),
