@@ -29,8 +29,6 @@ uploaded_file = st.sidebar.file_uploader("اختر ملف Excel (.xlsx أو .xls
 df = load_excel_data(uploaded_file)
 
 if df is not None:
-    st.sidebar.success("تم تحميل البيانات بنجاح!")
-    
     selected_year = st.sidebar.selectbox("اختر السنة", YEARS)
     selected_product = st.sidebar.multiselect("اختر فئات المنتجات", PRODUCTS, default=PRODUCTS)
     
