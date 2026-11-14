@@ -33,36 +33,6 @@ st.markdown("""
 body { background-color: #F4F7FB; color: #263445; direction: rtl; text-align: right; }
 .stMetric { background-color: #FFFFFF; padding: 14px; border-radius: 10px; box-shadow: 0 3px 6px rgba(0,0,0,0.05); }
 h1, h2, h3 { color: #142B4A; }
-.quarter-card {
-    background-color: #FFFFFF;
-    border: 2px solid #CBD5E1;
-    border-radius: 16px;
-    padding: 20px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.04);
-    margin-bottom: 20px;
-}
-.legend-box {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    justify-content: center;
-    height: 100%;
-    padding-top: 30px;
-}
-.legend-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 16px;
-    font-weight: bold;
-    color: #142B4A;
-}
-.legend-color {
-    width: 18px;
-    height: 18px;
-    border-radius: 3px;
-    display: inline-block;
-}
 </style>
 """, unsafe_allow_html=True)
 
@@ -287,8 +257,8 @@ if sheets_dict is not None:
             st.subheader(f"📈 نظرة عامة على الأداء الشهري لعام {selected_year}")
             st.plotly_chart(plot_monthly_target_vs_actual(m_summary), use_container_width=True, config={'displayModeBar': False})
 
-            # --- 3. نسب تحقيق المستهدف حسب فئة المنتج (التصميم الدائري الأنيق المطلوب) ---
-            st.subheader("🎯 نسب تحقيق المستهدف حسب فئة المنتج")
+            # --- 3. نسب تحقيق المستهدف حسب فئة المنتج (تصميم الدوائر الأربع تماماً كالصورة المطلوبة) ---
+            st.markdown("### 🎯 نسب تحقيق المستهدف حسب فئة المنتج")
             year_prod_df = summarize_by_period(clean_df[(clean_df["Year"] == selected_year) & (clean_df["Quarter"].isin(selected_quarters))], ["Product"])
             prod_colors = {"Min": COLORS["dark_blue"], "Syn": COLORS["orange"], "DEO": COLORS["teal"], "Fluids": COLORS["navy_blue"]}
             d_cols = st.columns(4)
