@@ -16,8 +16,6 @@ st.set_page_config(
 COLORS = {
     "navy_blue": "#142B4A",
     "dark_blue": "#1E3A5F",
-    "mid_blue": "#2B6CB0",
-    "light_blue": "#38BDF8",
     "teal": "#00A6A6",
     "green": "#16A36A",
     "orange": "#F59E0B",
@@ -223,101 +221,6 @@ def create_donut_chart(percentage, color):
     fig.update_layout(showlegend=False, annotations=[dict(text=label_text, x=0.5, y=0.5, font_size=19, font_weight="bold", font_color=COLORS["text"], showarrow=False)], plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", margin=dict(l=5, r=5, t=5, b=5), height=150)
     return fig
 
-# --- دوال التصميم الربعي الجديد المطابق للصورة ---
-def plot_exploded_quarterly_donut(q_prod_df, total_q_ach):
-    # ترتيب الفئات وألوانها لمطابقة التصميم المرفق
-    ordered_prods = ["Fluids", "DEO", "Syn", "Min"]
-    labels_map = {
-        "Fluids": "Liquids (سائل)",
-        "DEO": "DEO (مزيل عرق)",
-        "Syn": "Syn (اصطناعي)",
-        "Min": "Min"
-    }
-    colors_map = {
-        "Fluids": "#00A6A6", # تيل / أخضر مزرق
-        "DEO": "#142B4A",    # أزرق داكن جداً
-        "Syn": "#2B6CB0",    # أزرق متوسط
-        "Min": "#F59E0B"     # برتقالي ذهبي
-    }
-    
-    vals = []
-    labels = []
-    colors = []
-    custom_texts = []
-    
-    for p in ordered_prods:
-        row = q_prod_df[q_prod_df["Product"] == p]
-        act = row["Actual"].values[0] if (not row.empty and pd.notna(row["Actual"].values[0])) else 0
-        tgt = row["Target"].values[0] if (not row.empty and pd.notna(row["Target"].values[0])) else 0
-        pct = row["Achievement %"].values[0] if (not row.empty and pd.notna(row["Achievement %"].values[0])) else 0
-        
-        # نستخدم القيمة الفعلية أو المستهدفة إذا لم يسجل فعلي بعد حتى يظهر الشكل الدائري
-        val_to_plot = act if act > 0 else (tgt if tgt > 0 else 1)
-        vals.append(val_to_plot)
-        labels.append(labels_map[p])
-        colors.append(colors_map[p])
-        custom_texts.append(f"{p}<br>الفعلي: {act:,.2f}<br>المستهدف: {tgt:,.2f}<br>الإنجاز: {pct:.1f}%")
-
-    center_text = f"<b>{total_q_ach:.1f}%</b><br><span style='font-size:14px; color:#555;'>Total</span>" if pd.notna(total_q_ach) else "<b>0.0%</b><br><span style='font-size:14px;'>Total</span>"
-
-    fig = go.Figure(data=[go.Pie(
-        labels=labels,
-        values=vals,
-        hole=0.52,
-        pull=[0.06, 0.06, 0.06, 0.06], # فصل الشرائح (Exploded effect) مثل الصورة
-        marker=dict(colors=colors, line=dict(color='#FFFFFF', width=2)),
-        textinfo='label',
-        textposition='outside',
-        textfont=dict(size=13, color="#142B4A", family="Arial"),
-        hovertext=custom_texts,
-        hoverinfo="text",
-        sort=False
-    )])
-
-    fig.update_layout(
-        showlegend=False,
-        annotations=[dict(text=center_text, x=0.5, y=0.5, font_size=22, font_color="#142B4A", showarrow=False)],
-        plot_bgcolor="rgba(0,0,0,0)",
-        paper_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=40, r=40, t=20, b=20),
-        height=290
-    )
-    return fig
-
-def plot_mini_quarter_bars(sub_df, months_order):
-    fig = go.Figure()
-    fig.add_trace(go.Bar(
-        x=sub_df["Month"], y=sub_df["Target"],
-        name="المستهدف", marker_color="#142B4A",
-        width=0.35
-    ))
-    fig.add_trace(go.Bar(
-        x=sub_df["Month"], y=sub_df["Actual"],
-        name="الفعلي", marker_color="#00A6A6",
-        width=0.35
-    ))
-    fig.update_layout(
-        barmode="group",
-        bargap=0.25,
-        showlegend=False,
-        plot_bgcolor="rgba(0,0,0,0)",
-        paper_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=10, r=10, t=10, b=20),
-        height=160,
-        xaxis=dict(
-            categoryorder='array',
-            categoryarray=months_order,
-            showgrid=False,
-            tickfont=dict(size=11, color="#64748B")
-        ),
-        yaxis=dict(
-            showgrid=True,
-            gridcolor="#F1F5F9",
-            tickfont=dict(size=10, color="#94A3B8")
-        )
-    )
-    return fig
-
 def convert_dfs_to_excel(sheets_dict):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -384,7 +287,7 @@ if sheets_dict is not None:
             st.subheader(f"📈 نظرة عامة على الأداء الشهري لعام {selected_year}")
             st.plotly_chart(plot_monthly_target_vs_actual(m_summary), use_container_width=True, config={'displayModeBar': False})
 
-            # --- 3. دوائر الإنجاز ---
+            # --- 3. نسب تحقيق المستهدف حسب فئة المنتج (التصميم الدائري الأنيق المطلوب) ---
             st.subheader("🎯 نسب تحقيق المستهدف حسب فئة المنتج")
             year_prod_df = summarize_by_period(clean_df[(clean_df["Year"] == selected_year) & (clean_df["Quarter"].isin(selected_quarters))], ["Product"])
             prod_colors = {"Min": COLORS["dark_blue"], "Syn": COLORS["orange"], "DEO": COLORS["teal"], "Fluids": COLORS["navy_blue"]}
@@ -445,7 +348,7 @@ if sheets_dict is not None:
             daily_sheets = detect_daily_sales_data(sheets_dict)
 
             if not daily_sheets:
-                st.info("لم يتم العثور على شيت يحتوي على تواريخ يومية داخل الملف المرفوع. الشيتات المتوفرة في الملف هي: " + "، ".join(sheets_dict.keys()))
+                st.info("لم يتم العثور على شيت يحتوي على تواريخ يومية داخل الملف المرفوع.")
             else:
                 chosen_daily_sheet = st.selectbox("اختر شيت البيانات اليومية:", list(daily_sheets.keys()))
                 daily_df, date_col_name = daily_sheets[chosen_daily_sheet]
@@ -491,80 +394,46 @@ if sheets_dict is not None:
                     )
                     fig_daily.update_layout(plot_bgcolor=COLORS["white"], paper_bgcolor=COLORS["white"], xaxis_title="التاريخ", yaxis_title=val_col)
                     st.plotly_chart(fig_daily, use_container_width=True, config={'displayModeBar': False})
-
-                    with st.expander("عرض سجل الحركات اليومية التفصيلي"):
-                        st.dataframe(daily_year_df.drop(columns=["Parsed_Date", "Date_Only"], errors="ignore"), use_container_width=True)
                 else:
                     st.dataframe(daily_year_df.drop(columns=["Parsed_Date"], errors="ignore"), use_container_width=True)
 
             st.markdown("---")
 
-            # --- 6. التحليل الربعي الاحترافي (مطابق للتصميم المرفق) ---
+            # --- 6. التحليل الربعي ونصف السنوي ---
             st.subheader("🗓️ التحليل الربعي ونصف السنوي")
-            
-            q_select_col, _ = st.columns([1, 3])
-            with q_select_col:
-                target_quarter = st.selectbox("اختر الربع السنوي لعرض البطاقة التفصيلية:", ["Q1", "Q2", "Q3", "Q4"], index=0)
+            q_summary = summarize_by_period(filtered_df, ["Quarter"])
+            h_summary = summarize_by_period(filtered_df, ["Half"])
+            qc1, qc2 = st.columns([3, 2])
+            with qc1:
+                fig_q = go.Figure()
+                fig_q.add_trace(go.Bar(x=q_summary["Quarter"], y=q_summary["Target"], name="مستهدف الربع", marker_color=COLORS["navy_blue"]))
+                fig_q.add_trace(go.Bar(x=q_summary["Quarter"], y=q_summary["Actual"], name="فعلي الربع", marker_color=COLORS["teal"]))
+                fig_q.update_layout(barmode="group", plot_bgcolor=COLORS["white"], paper_bgcolor=COLORS["white"], font_color=COLORS["text"], margin=dict(l=20, r=20, t=30, b=20), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+                st.plotly_chart(fig_q, use_container_width=True, config={'displayModeBar': False})
+            with qc2:
+                st.dataframe(q_summary.style.format({"Target": "{:,.2f}", "Actual": "{:,.2f}", "Achievement %": "{:.1f}%"}, na_rep="—"), use_container_width=True)
+                st.dataframe(h_summary.style.format({"Target": "{:,.2f}", "Actual": "{:,.2f}", "Achievement %": "{:.1f}%"}, na_rep="—"), use_container_width=True)
 
-            quarter_months_map = {
-                "Q1": ["Jan", "Feb", "Mar"],
-                "Q2": ["Apr", "May", "Jun"],
-                "Q3": ["Jul", "Aug", "Sep"],
-                "Q4": ["Oct", "Nov", "Dec"]
+            st.markdown("---")
+
+            # --- 7. الجداول التحليلية والتصدير ---
+            st.subheader("📋 الجداول التحليلية المفصلة")
+            tab1, tab2, tab3, tab4 = st.tabs(["التفصيل الشهري العام", f"تفصيل شهر {selected_single_month}", "تفصيل المنتجات", "مقارنة السنوات"])
+            with tab1: st.dataframe(m_summary.drop(columns=["Month_Num"]).style.format({"Target": "{:,.2f}", "Actual": "{:,.2f}", "Achievement %": "{:.1f}%"}, na_rep="—"), use_container_width=True)
+            with tab2: st.dataframe(single_month_enriched.drop(columns=["Month_Num"]).style.format({"Target": "{:,.2f}", "Actual": "{:,.2f}", "Achievement %": "{:.1f}%"}, na_rep="—"), use_container_width=True)
+            with tab3: st.dataframe(summarize_by_period(filtered_df, ["Product", "Quarter"]).style.format({"Target": "{:,.2f}", "Actual": "{:,.2f}", "Achievement %": "{:.1f}%"}, na_rep="—"), use_container_width=True)
+            with tab4: st.dataframe(summarize_by_period(clean_df[clean_df["Product"].isin(selected_products)], ["Year"]).style.format({"Target": "{:,.2f}", "Actual": "{:,.2f}", "Achievement %": "{:.1f}%"}, na_rep="—"), use_container_width=True)
+
+            st.markdown("### 📥 تصدير التقارير")
+            export_sheets = {
+                "Monthly_All": m_summary.drop(columns=["Month_Num"]),
+                f"Month_{selected_single_month}": single_month_enriched.drop(columns=["Month_Num"]),
+                "Quarterly": q_summary,
+                "Half_Yearly": h_summary,
+                "Products": p_summary
             }
-            q_months = quarter_months_map[target_quarter]
+            if daily_sheets and 'daily_grouped' in locals():
+                export_sheets["Daily_Sales"] = daily_grouped
 
-            q_specific_df = clean_df[
-                (clean_df["Year"] == selected_year) &
-                (clean_df["Quarter"] == target_quarter) &
-                (clean_df["Product"].isin(selected_products))
-            ].copy()
-
-            q_prod_summary = summarize_by_period(q_specific_df, ["Product"])
-            q_tot_target = q_specific_df["Target"].sum()
-            q_tot_actual = q_specific_df["Actual"].sum(min_count=1)
-            q_tot_ach = (q_tot_actual / q_tot_target * 100) if (pd.notna(q_tot_actual) and q_tot_target > 0) else np.nan
-
-            # إطار البطاقة البيضاء المطابق للصورة
-            with st.container():
-                st.markdown(f"""
-                <div class="quarter-card">
-                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 12px; margin-bottom: 10px;">
-                        <h3 style="margin:0; color:#142B4A; font-size:22px;">أداء 4 منتجات ({target_quarter}) : {selected_year}</h3>
-                        <div style="display:flex; gap:18px; font-size:14px; font-weight:bold; color:#263445;">
-                            <span><span style="display:inline-block; width:12px; height:12px; background-color:#142B4A; margin-left:6px; border-radius:2px;"></span>المستهدف</span>
-                            <span><span style="display:inline-block; width:12px; height:12px; background-color:#00A6A6; margin-left:6px; border-radius:2px;"></span>الفعلي</span>
-                            <span style="color:#00A6A6;">% الإنجاز: {f"{q_tot_ach:.1f}%" if pd.notna(q_tot_ach) else "0.0%"}</span>
-                        </div>
-                    </div>
-                """, unsafe_allow_html=True)
-
-                # القسم العلوي داخل البطاقة: الدائرة المجزأة + مفتاح الألوان الجانبي
-                donut_col, legend_col = st.columns([3, 1])
-                with donut_col:
-                    st.plotly_chart(plot_exploded_quarterly_donut(q_prod_summary, q_tot_ach), use_container_width=True, config={'displayModeBar': False})
-                with legend_col:
-                    st.markdown("""
-                    <div class="legend-box">
-                        <div class="legend-item"><span class="legend-color" style="background-color:#00A6A6;"></span> سائل (Fluids)</div>
-                        <div class="legend-item"><span class="legend-color" style="background-color:#142B4A;"></span> مزيل عرق (DEO)</div>
-                        <div class="legend-item"><span class="legend-color" style="background-color:#2B6CB0;"></span> اصطناعي (Syn)</div>
-                        <div class="legend-item"><span class="legend-color" style="background-color:#F59E0B;"></span> Min</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                # القسم السفلي داخل البطاقة: 3 رسوم بيانية مصغرة لأشهر الربع
-                b_col1, b_col2, b_col3 = st.columns(3)
-                
-                # الرسم المصغر 1: أداء المنتج الأساسي (Min) خلال أشهر الربع
-                min_q_df = summarize_by_period(q_specific_df[q_specific_df["Product"] == "Min"], ["Month"])
-                with b_col1:
-                    st.markdown("<div style='text-align:center; font-size:12px; font-weight:bold; color:#475569;'>أداء فئة Min</div>", unsafe_allow_html=True)
-                    st.plotly_chart(plot_mini_quarter_bars(min_q_df, q_months), use_container_width=True, config={'displayModeBar': False})
-
-                # الرسم المصغر 2: إجمالي الربع عبر الأشهر الثلاثة
-                tot_q_months_df = summarize_by_period(q_specific_df, ["Month"])
-                with b_col2:
-                    st.markdown("<div style='text-align:center; font-size:12px; font-weight:bold; color:#475569;'>إجمالي المبيعات الشهرية للربع</div>", unsafe_allow_html=True)
-                    st.plotly
-
+            excel_bytes = convert_dfs_to_excel(export_sheets)
+            st.download_button("📊 تحميل التقرير الشامل (Excel متعدد الشيتات)", data=excel_bytes, file_name=f"Sales_Analysis_{selected_year}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
