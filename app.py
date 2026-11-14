@@ -45,7 +45,7 @@ TEXT = {
         "variance": "⚖️ الفرق",
         "product_perf": "أداء المنتجات",
         "total_chart": "الإجمالي (فعلي مقابل مستهدف)",
-        "daily": "تحليل المبيعات اليومية",
+        "daily": "تحليل المبيعات اليومية (شيت Data)",
         "tables": "الجداول التحليلية",
         "export": "تصدير التقارير",
         "download": "تحميل التقرير الشامل (Excel)",
@@ -55,7 +55,9 @@ TEXT = {
         "select_month": "📅 اختر الشهر",
         "daily_year": "📅 سنة المبيعات اليومية",
         "daily_month": "🗓️ شهر المبيعات اليومية",
-        "value_col": "📊 عمود المبيعات",
+        "sales_count": "عدد المبيعات",
+        "invoice_count": "عدد الفواتير",
+        "total_amount": "إجمالي المبلغ",
         "all": "الكل",
         "na": "غير متاح",
     },
@@ -81,7 +83,7 @@ TEXT = {
         "variance": "⚖️ Variance",
         "product_perf": "Products Performance",
         "total_chart": "Total (Actual vs Target)",
-        "daily": "Daily Sales Breakdown",
+        "daily": "Daily Sales Breakdown (Data Sheet)",
         "tables": "Detailed Analytical Tables",
         "export": "Export Reports",
         "download": "Download Comprehensive Report (Excel)",
@@ -91,7 +93,9 @@ TEXT = {
         "select_month": "📅 Select month",
         "daily_year": "📅 Daily Sales Year",
         "daily_month": "🗓️ Daily Sales Month",
-        "value_col": "📊 Sales column",
+        "sales_count": "Sales Count",
+        "invoice_count": "Invoice Count",
+        "total_amount": "Total Amount",
         "all": "All",
         "na": "N/A",
     },
@@ -229,7 +233,6 @@ def num(v):
 def pct(v):
     return "—" if pd.isna(v) else f"{v:.1f}%"
 
-# دوائر متناسقة ومضبوطة تماماً (compact=True للنصف والربع لتحسين التنسيق ومنع القص)
 def donut(actual, target, product, compact=False):
     valid = pd.notna(actual) and pd.notna(target) and target > 0
     rate = actual / target * 100 if valid else 0
@@ -376,20 +379,35 @@ def render_panel(title, period, data, key, icon="📊", full_width=False):
                             key=f"{key}_{product}"
                         )
 
-def daily_data(sheets):
-    name = next((n for n in sheets if n.strip().lower() == "sales report"), None)
+def daily_data_from_sheet(sheets):
+    """سحب البيانات من شيت Data بالاعتماد على الأعمدة D (مبلغ المبيعات) و I, J (التواريخ والفواتير)"""
+    name = next((n for n in sheets if n.strip().lower() == "data"), None)
     if not name:
         return None
     df = sheets[name].copy()
-    for col in df.columns:
-        if any(k in str(col).lower() for k in ["date", "تاريخ", "day", "يوم"]):
-            parsed = pd.to_datetime(df[col], errors="coerce")
-            if parsed.notna().sum() == 0 and pd.api.types.is_numeric_dtype(df[col]):
-                parsed = pd.to_datetime(df[col], unit="D", origin="1899-12-30", errors="coerce")
-            if parsed.notna().sum():
-                df["Parsed_Date"] = parsed
-                return df.dropna(subset=["Parsed_Date"]).copy()
-    return None
+    if df.shape[1] < 10:  # التأكد من وجود أعمدة حتى العمود J (index 9) على الأقل
+        return None
+    
+    # تحديد عمود التاريخ من العمود I (index 8) أو J (index 9)
+    date_col_idx = None
+    for idx in [8, 9]:
+        if idx < df.shape[1]:
+            parsed = pd.to_datetime(df.iloc[:, idx], errors="coerce")
+            if parsed.notna().sum() > 0:
+                date_col_idx = idx
+                break
+    if date_col_idx is None:
+        return None
+        
+    invoice_col_idx = 9 if date_col_idx == 8 else 8
+    amount_col_idx = 3  # العمود D (index 3)
+    
+    res = pd.DataFrame()
+    res["Parsed_Date"] = pd.to_datetime(df.iloc[:, date_col_idx], errors="coerce")
+    res["Amount"] = pd.to_numeric(df.iloc[:, amount_col_idx], errors="coerce")
+    res["Invoice"] = df.iloc[:, invoice_col_idx]
+    
+    return res.dropna(subset=["Parsed_Date"]).copy()
 
 def excel_bytes(sheet_map):
     output = io.BytesIO()
@@ -477,7 +495,7 @@ with quarter_col:
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# الصف الثاني: تحليل الشهر بجانب تحليل المبيعات اليومية بشكل متناسق تماماً
+# الصف الثاني: تحليل الشهر بجانب تحليل المبيعات اليومية من شيت Data
 month_col, daily_col = st.columns(2, gap="medium")
 
 with month_col:
@@ -486,26 +504,32 @@ with month_col:
 
 with daily_col:
     st.markdown(f'<div class="panel-heading">📅 {t["daily"]}</div>', unsafe_allow_html=True)
-    daily = daily_data(sheets)
-    if daily is not None and not daily.empty:
-        daily_years = sorted(daily.Parsed_Date.dt.year.dropna().unique().tolist())
+    daily_df = daily_data_from_sheet(sheets)
+    if daily_df is not None and not daily_df.empty:
+        daily_years = sorted(daily_df.Parsed_Date.dt.year.dropna().unique().tolist())
         d1, d2 = st.columns(2)
         with d1:
             dy = st.selectbox(t["daily_year"], daily_years, index=len(daily_years) - 1, key="daily_year_select")
-        dy_df = daily[daily.Parsed_Date.dt.year == dy].copy()
-        dy_df["Month_Name"] = dy_df.Parsed_Date.dt.strftime("%b")
+        dy_filtered = daily_df[daily_df.Parsed_Date.dt.year == dy].copy()
+        dy_filtered["Month_Name"] = dy_filtered.Parsed_Date.dt.strftime("%b")
         with d2:
-            available = [m for m in MONTHS if m in dy_df.Month_Name.unique()]
+            available = [m for m in MONTHS if m in dy_filtered.Month_Name.unique()]
             dm = st.selectbox(t["daily_month"], [t["all"]] + available, key="daily_month_select")
-        numeric = [c for c in dy_df.select_dtypes(include=[np.number]).columns if c not in ["Year", "Month", "Month_Num"]]
-        value_col = st.selectbox(t["value_col"], numeric, key="daily_val_select") if numeric else None
-        
+            
         if dm != t["all"]:
-            dy_df = dy_df[dy_df.Month_Name == dm]
-        if value_col and not dy_df.empty:
-            dy_df["Date_Only"] = dy_df.Parsed_Date.dt.date
-            grouped = dy_df.groupby("Date_Only", as_index=False)[value_col].sum().sort_values("Date_Only")
-            fig = go.Figure(go.Bar(x=grouped.Date_Only, y=grouped[value_col], marker_color=C["teal"]))
+            dy_filtered = dy_filtered[dy_filtered.Month_Name == dm]
+            
+        if not dy_filtered.empty:
+            dy_filtered["Date_Only"] = dy_filtered.Parsed_Date.dt.date
+            # حساب عدد المبيعات، عدد الفواتير، وإجمالي المبلغ لكل يوم
+            grouped_daily = dy_filtered.groupby("Date_Only", as_index=False).agg(
+                Sales_Count=("Amount", "count"),
+                Invoice_Count=("Invoice", "nunique"),
+                Total_Amount=("Amount", "sum")
+            ).sort_values("Date_Only")
+            
+            # رسم بياني لإجمالي المبلغ اليومي
+            fig = go.Figure(go.Bar(x=grouped_daily.Date_Only, y=grouped_daily.Total_Amount, marker_color=C["teal"]))
             fig.update_layout(
                 height=238, margin=dict(l=6, r=6, t=24, b=6),
                 plot_bgcolor="white", paper_bgcolor="white",
@@ -513,10 +537,23 @@ with daily_col:
                 xaxis=dict(showgrid=False), yaxis=dict(gridcolor=C["gray"], rangemode="tozero")
             )
             st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            
+            # عرض جدول ملخص الإحصائيات اليومية
+            st.dataframe(
+                grouped_daily.rename(columns={
+                    "Date_Only": "التاريخ",
+                    "Sales_Count": t["sales_count"],
+                    "Invoice_Count": t["invoice_count"],
+                    "Total_Amount": t["total_amount"]
+                }).style.format({"Total_Amount": "{:,.2f}"}),
+                use_container_width=True,
+                hide_index=True,
+                height=150
+            )
         else:
             st.info(t["no_data"])
     else:
-        st.info("ℹ️ لم يتم العثور على بيانات يومية قابلة للقراءة في شيت Sales Report.")
+        st.info("ℹ️ لم يتم العثور على شيت Data أو أن الأعمدة المطلوبة غير متوفرة بشكل صحيح.")
 
 st.markdown("<hr>", unsafe_allow_html=True)
 st.markdown(f'<div class="section-heading">📋 {t["tables"]}</div>', unsafe_allow_html=True)
