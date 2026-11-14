@@ -27,12 +27,20 @@ COLORS = {
 PRODUCTS = ["Min", "Syn", "DEO", "Fluids"]
 VALID_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
-# تنسيق CSS عام
+# تنسيق CSS عام للبطاقات والعناوين
 st.markdown("""
 <style>
 body { background-color: #F4F7FB; color: #263445; direction: rtl; text-align: right; }
 .stMetric { background-color: #FFFFFF; padding: 14px; border-radius: 10px; box-shadow: 0 3px 6px rgba(0,0,0,0.05); }
 h1, h2, h3 { color: #142B4A; }
+.custom-card {
+    background-color: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 12px;
+    padding: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+    margin-bottom: 10px;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -217,8 +225,7 @@ def create_donut_chart(percentage, color, product_name="", actual_val=None, targ
     act_str = f"{actual_val:,.2f}" if (actual_val is not None and not pd.isna(actual_val)) else "0.00"
     tgt_str = f"{target_val:,.2f}" if (target_val is not None and not pd.isna(target_val)) else "0.00"
     
-    # تصغير حجم النصوص داخل الدائرة لتكون أصغر وأكثر تناسقاً
-    center_text = f"<b>{product_name}</b><br><span style='font-size:13px; color:#142B4A;'><b>{pct_text}</b></span><br><span style='font-size:8px; color:#555;'>الفعلي: {act_str}<br>المستهدف: {tgt_str}</span>" if product_name else f"<b>{pct_text}</b>"
+    center_text = f"<b>{product_name}</b><br><span style='font-size:13px; color:#142B4A;'><b>{pct_text}</b></span><br><span style='font-size:8px; color:#555;'>{act_str} / {tgt_str}</span>" if product_name else f"<b>{pct_text}</b>"
     
     fig = go.Figure(data=[go.Pie(values=[display_val, 100 - display_val], hole=0.7, marker_colors=[color, "#E2E8F0"], textinfo="none", hoverinfo="none", sort=False)])
     fig.update_layout(
@@ -297,17 +304,43 @@ if sheets_dict is not None:
             st.subheader(f"📈 نظرة عامة على الأداء الشهري لعام {selected_year}")
             st.plotly_chart(plot_monthly_target_vs_actual(m_summary), use_container_width=True, config={'displayModeBar': False})
 
-            # --- 3. تحليل الربع السنوية (تم عكسها لتطابق القسم السفلي: دوائر المنتجات 2x2 على اليسار وأعمدة الربع على اليمين) ---
-            st.subheader("🎯 تحليل أداء المنتجات مقابل الإجمالي الربعي")
-            
+            # --- 3. قسم تحليل الأداء الربعي (الأعمدة على اليسار والدوائر على اليمين + 4 بطاقات إحصائية بالأسفل) ---
+            st.markdown("---")
             prod_colors = {
                 "Fluids": COLORS["navy_blue"],
                 "DEO": COLORS["teal"],
                 "Syn": COLORS["orange"],
                 "Min": COLORS["dark_blue"]
             }
-            
-            col_q_left, col_q_right = st.columns([1.5, 1])
+
+            col_q_right, col_q_left = st.columns([1, 1.3])
+
+            with col_q_right:
+                st.markdown("##### 📊 إجمالي أداء الأرباع السنوية")
+                q_summary = summarize_by_period(filtered_df, ["Quarter"])
+
+                fig_q = go.Figure()
+                fig_q.add_trace(go.Bar(
+                    x=q_summary["Quarter"], y=q_summary["Target"],
+                    name="المستهدف", marker_color=COLORS["navy_blue"],
+                    text=q_summary["Target"].apply(lambda x: f"{x:,.2f}"), textposition="auto"
+                ))
+                fig_q.add_trace(go.Bar(
+                    x=q_summary["Quarter"], y=q_summary["Actual"],
+                    name="الفعلي", marker_color=COLORS["teal"],
+                    text=q_summary.apply(lambda r: f"{r['Actual']:,.2f}<br>({r['Achievement %']:.1f}%)" if pd.notna(r['Actual']) else "غير مسجل", axis=1), 
+                    textposition="auto"
+                ))
+                fig_q.update_layout(
+                    barmode="group",
+                    plot_bgcolor=COLORS["white"],
+                    paper_bgcolor=COLORS["white"],
+                    font_color=COLORS["text"],
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    height=310,
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10))
+                )
+                st.plotly_chart(fig_q, use_container_width=True, config={'displayModeBar': False})
 
             with col_q_left:
                 st.markdown("##### نسب الإنجاز للمنتجات (الربع السنوي)")
@@ -329,38 +362,23 @@ if sheets_dict is not None:
                             with d_cols[col_idx]:
                                 st.plotly_chart(create_donut_chart(p_pct, prod_colors[prod], product_name=prod, actual_val=p_actual, target_val=p_target), use_container_width=True, config={'displayModeBar': False})
 
-            with col_q_right:
-                st.markdown("##### 🗓️ إجمالي أداء الأرباع السنوية")
-                q_summary = summarize_by_period(filtered_df, ["Quarter"])
+            # بطاقات الملخص الربعي السفلي
+            q_total_target = q_summary["Target"].sum()
+            q_total_actual = q_summary["Actual"].sum(min_count=1)
+            q_ach_pct = (q_total_actual / q_total_target * 100) if (pd.notna(q_total_actual) and q_total_target > 0) else np.nan
+            q_var = (q_total_actual - q_total_target) if pd.notna(q_total_actual) else np.nan
 
-                fig_q = go.Figure()
-                fig_q.add_trace(go.Bar(
-                    x=q_summary["Quarter"], y=q_summary["Target"],
-                    name="المستهدف", marker_color=COLORS["navy_blue"],
-                    text=q_summary["Target"].apply(lambda x: f"المستهدف: {x:,.2f}"), textposition="auto"
-                ))
-                fig_q.add_trace(go.Bar(
-                    x=q_summary["Quarter"], y=q_summary["Actual"],
-                    name="الفعلي", marker_color=COLORS["teal"],
-                    text=q_summary.apply(lambda r: f"الفعلي: {r['Actual']:,.2f}<br>({r['Achievement %']:.1f}%)" if pd.notna(r['Actual']) else "غير مسجل", axis=1), 
-                    textposition="auto"
-                ))
-                fig_q.update_layout(
-                    barmode="group",
-                    plot_bgcolor=COLORS["white"],
-                    paper_bgcolor=COLORS["white"],
-                    font_color=COLORS["text"],
-                    margin=dict(l=10, r=10, t=10, b=10),
-                    height=330,
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10))
-                )
-                st.plotly_chart(fig_q, use_container_width=True, config={'displayModeBar': False})
+            q_b1, q_b2, q_b3, q_b4 = st.columns(4)
+            q_b1.metric("الفارق (Variance)", f"{q_var:+,.2f}" if pd.notna(q_var) else "—")
+            q_b2.metric("نسبة تحقيق الأرباع", f"{q_ach_pct:.1f}%" if pd.notna(q_ach_pct) else "—")
+            q_b3.metric("إجمالي فعلي الأرباع", f"{q_total_actual:,.2f}" if pd.notna(q_total_actual) else "غير مسجل")
+            q_b4.metric("إجمالي مستهدف الأرباع", f"{q_total_target:,.2f}")
 
             st.markdown("---")
 
-            # --- 4. مقارنة منتجات الشهر المفصل (دوائر المنتجات 2x2 على اليسار بجانب أعمدة إجمالي الشهر على اليمين) ---
-            st.subheader(f"🔍 تحليل أداء المنتجات مقابل إجمالي المبيعات الشهرية - {selected_year}")
+            # --- 4. قسم تحليل الأداء الشهري (الأعمدة على اليسار والدوائر على اليمين + 4 بطاقات إحصائية بالأسفل) ---
             selected_single_month = st.selectbox("اختر الشهر لعرض تفاصيله:", VALID_MONTHS, index=0)
+            st.markdown(f"### تحليل أداء المنتجات مقابل إجمالي المبيعات لشهر {selected_single_month} - {selected_year}")
             
             single_month_df = clean_df[
                 (clean_df["Year"] == selected_year) & 
@@ -374,15 +392,31 @@ if sheets_dict is not None:
             sm_ach = (sm_actual / sm_target * 100) if (pd.notna(sm_actual) and sm_target > 0) else np.nan
             sm_var = (sm_actual - sm_target) if pd.notna(sm_actual) else np.nan
 
-            sm1, sm2, sm3, sm4 = st.columns(4)
-            sm1.metric(f"مستهدف شهر {selected_single_month}", f"{sm_target:,.2f}")
-            sm2.metric(f"فعلي شهر {selected_single_month}", f"{sm_actual:,.2f}" if pd.notna(sm_actual) else "غير مسجل")
-            sm3.metric("نسبة تحقيق الشهر", f"{sm_ach:.1f}%" if pd.notna(sm_ach) else "—")
-            sm4.metric("الفارق (Variance)", f"{sm_var:+,.2f}" if pd.notna(sm_var) else "—")
+            col_m_right, col_m_left = st.columns([1, 1.3])
 
-            st.markdown(f"**تفاصيل أداء شهر {selected_single_month} (المنتجات مقابل إجمالي أعمدة الشهر):**")
-            
-            col_m_left, col_m_right = st.columns([1.5, 1])
+            with col_m_right:
+                st.markdown(f"##### 📊 إجمالي مبيعات شهر {selected_single_month}")
+                fig_month_bar = go.Figure()
+                fig_month_bar.add_trace(go.Bar(
+                    x=[selected_single_month], y=[sm_target],
+                    name="المستهدف", marker_color=COLORS["navy_blue"],
+                    text=[f"{sm_target:,.2f}"], textposition="auto"
+                ))
+                fig_month_bar.add_trace(go.Bar(
+                    x=[selected_single_month], y=[sm_actual if pd.notna(sm_actual) else 0],
+                    name="الفعلي", marker_color=COLORS["teal"],
+                    text=[f"{sm_actual:,.2f}<br>({sm_ach:.1f}%)" if pd.notna(sm_actual) else "غير مسجل"], textposition="auto"
+                ))
+                fig_month_bar.update_layout(
+                    barmode="group",
+                    plot_bgcolor=COLORS["white"],
+                    paper_bgcolor=COLORS["white"],
+                    font_color=COLORS["text"],
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    height=310,
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10))
+                )
+                st.plotly_chart(fig_month_bar, use_container_width=True, config={'displayModeBar': False})
 
             with col_m_left:
                 st.markdown(f"##### نسب الإنجاز للمنتجات (شهر {selected_single_month})")
@@ -400,29 +434,12 @@ if sheets_dict is not None:
                             with m_d_cols[col_idx]:
                                 st.plotly_chart(create_donut_chart(p_pct, prod_colors[prod], product_name=prod, actual_val=p_a, target_val=p_t), use_container_width=True, config={'displayModeBar': False})
 
-            with col_m_right:
-                st.markdown(f"##### 📊 إجمالي مبيعات شهر {selected_single_month}")
-                fig_month_bar = go.Figure()
-                fig_month_bar.add_trace(go.Bar(
-                    x=[selected_single_month], y=[sm_target],
-                    name="المستهدف", marker_color=COLORS["navy_blue"],
-                    text=[f"المستهدف: {sm_target:,.2f}"], textposition="auto"
-                ))
-                fig_month_bar.add_trace(go.Bar(
-                    x=[selected_single_month], y=[sm_actual if pd.notna(sm_actual) else 0],
-                    name="الفعلي", marker_color=COLORS["teal"],
-                    text=[f"الفعلي: {sm_actual:,.2f}<br>({sm_ach:.1f}%)" if pd.notna(sm_actual) else "غير مسجل"], textposition="auto"
-                ))
-                fig_month_bar.update_layout(
-                    barmode="group",
-                    plot_bgcolor=COLORS["white"],
-                    paper_bgcolor=COLORS["white"],
-                    font_color=COLORS["text"],
-                    margin=dict(l=10, r=10, t=10, b=10),
-                    height=330,
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10))
-                )
-                st.plotly_chart(fig_month_bar, use_container_width=True, config={'displayModeBar': False})
+            # بطاقات الملخص الشهري السفلي (مطابقة للصورة تماماً)
+            m_b1, m_b2, m_b3, m_b4 = st.columns(4)
+            m_b1.metric("الفارق (Variance)", f"{sm_var:+,.2f}" if pd.notna(sm_var) else "—")
+            m_b2.metric("نسبة تحقيق الشهر", f"{sm_ach:.1f}%" if pd.notna(sm_ach) else "—")
+            m_b3.metric(f"فعلي شهر {selected_single_month}", f"{sm_actual:,.2f}" if pd.notna(sm_actual) else "غير مسجل")
+            m_b4.metric(f"مستهدف شهر {selected_single_month}", f"{sm_target:,.2f}")
 
             st.markdown("---")
 
