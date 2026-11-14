@@ -107,7 +107,6 @@ TEXT = {
     },
 }
 
-# تنسيق CSS احترافي متجاوب
 st.markdown(f"""
 <style>
 .stApp {{ background-color: {C['bg']}; color: {C['text']}; }}
@@ -266,7 +265,6 @@ def num(v):
 def pct(v):
     return "—" if pd.isna(v) else f"{v:.1f}%"
 
-# دالة SVG احترافية لرسم الدائرة كاملة 100% بدون أي قص وبخط واضح جداً
 def render_svg_donut(actual, target, product):
     valid = pd.notna(actual) and pd.notna(target) and target > 0
     rate = (actual / target * 100) if valid else 0
@@ -274,7 +272,6 @@ def render_svg_donut(actual, target, product):
     label_pct = f"{rate:.1f}%" if valid else "N/A"
     color = PCOLORS[product]
     
-    # حسابات هندسية دقيقة لمحيط الدائرة (نصف القطر = 42)
     radius = 42
     circumference = 2 * 3.14159 * radius
     stroke_dashoffset = circumference - (ring_pct / 100.0) * circumference
@@ -300,7 +297,6 @@ def render_svg_donut(actual, target, product):
     """
     st.markdown(html, unsafe_allow_html=True)
 
-# رسم الأعمدة الإجمالية (فعلي مقابل مستهدف بدون منتجات)
 def total_bar_chart(period_label, actual, target, height=225):
     fig = go.Figure()
     fig.add_bar(
@@ -323,7 +319,13 @@ def total_bar_chart(period_label, actual, target, height=225):
     return fig
 
 def monthly_chart(month_df):
-    base = pd.DataFrame({"Month": MONTHS}).merge(month_df[["Month","Target","Actual"]], on="Month", how="left")
+    base = pd.DataFrame({"Month": MONTHS})
+    if not month_df.empty and "Month" in month_df.columns:
+        base = base.merge(month_df[["Month", "Target", "Actual"]], on="Month", how="left")
+    else:
+        base["Target"] = np.nan
+        base["Actual"] = np.nan
+
     fig = go.Figure()
     fig.add_bar(x=base.Month, y=base.Target, name=t["target"], marker_color=C["navy"],
                 text=base.Target.map(lambda v: "" if pd.isna(v) else f"{v:.2f}"), textposition="inside",
@@ -338,7 +340,6 @@ def monthly_chart(month_df):
         bargap=.22, bargroupgap=.08)
     return fig
 
-# دالة بناء كل قسم بتصميم متكامل ومتوازن
 def render_panel(title, period, data, key, is_full_row=False):
     st.markdown(f'<div class="panel-heading">📊 {title} ({period})</div>', unsafe_allow_html=True)
     if data.empty:
@@ -348,7 +349,6 @@ def render_panel(title, period, data, key, is_full_row=False):
     variance = actual - target if pd.notna(actual) and pd.notna(target) else np.nan
     rate = actual / target * 100 if pd.notna(actual) and pd.notna(target) and target > 0 else np.nan
     
-    # البطاقات الأربع العلوية
     a, b, c, d = st.columns(4)
     a.metric(t["variance"], num(variance))
     b.metric(t["achievement"], pct(rate))
@@ -358,7 +358,6 @@ def render_panel(title, period, data, key, is_full_row=False):
     st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
     
     if is_full_row:
-        # في الصف المستقل (تحليل الشهر): العمود الإجمالي بجانب الدوائر الأربعة في سطر واحد
         col_bar, col_donuts = st.columns([1, 2.6], gap="medium")
         with col_bar:
             st.caption(f"📊 {t['total_chart']}")
@@ -373,7 +372,6 @@ def render_panel(title, period, data, key, is_full_row=False):
                 with col:
                     render_svg_donut(total(subset.Actual), total(subset.Target), product)
     else:
-        # في النصف سنوي والربع سنوي: العمود الإجمالي بجانب شبكة 2×2 من الدوائر الاحترافية
         col_bar, col_donuts = st.columns([1, 1.8], gap="medium")
         with col_bar:
             st.caption(f"📊 {t['total_chart']}")
@@ -416,7 +414,6 @@ def excel_bytes(sheet_map):
             frame.to_excel(writer, sheet_name=name[:31], index=False)
     return output.getvalue()
 
-# القائمة الجانبية لرفع الملف
 st.sidebar.header(t["data"])
 uploaded = st.sidebar.file_uploader(t["upload"], type=["xlsx", "xls", "xlsb"])
 if uploaded is None:
@@ -441,7 +438,6 @@ if data is None or data.empty:
     st.error("تعذر قراءة شيت Target. تأكد من وجود أسماء المنتجات Min وSyn في صف العناوين.")
     st.stop()
 
-# الفلاتر الجانبية
 years = sorted(data.Year.dropna().unique().tolist())
 st.sidebar.header(t["filters"])
 year = st.sidebar.selectbox(t["year"], years, index=len(years)-1)
@@ -460,7 +456,6 @@ st.markdown(f"""
 year_data = data[(data.Year == year) & data.Product.isin(chosen_products)].copy()
 filtered = year_data[year_data.Quarter.isin(chosen_quarters)].copy()
 
-# المؤشرات التنفيذية العلوية
 target_total, actual_total = total(filtered.Target), total(filtered.Actual)
 achievement = actual_total/target_total*100 if pd.notna(actual_total) and pd.notna(target_total) and target_total > 0 else np.nan
 remaining = target_total-actual_total if pd.notna(actual_total) and pd.notna(target_total) else np.nan
@@ -484,7 +479,6 @@ st.markdown(f'<div class="panel-heading">📈 {t["monthly"]} {year}</div>', unsa
 st.plotly_chart(monthly_chart(month_summary), use_container_width=True, config={"displayModeBar":False})
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# الصف الأول: تحليل النصف السنوي والربع السنوي
 half_col, quarter_col = st.columns(2, gap="large")
 with half_col:
     half = st.selectbox(t["select_half"], ["H1","H2"], index=0, key="half_choice")
@@ -495,13 +489,11 @@ with quarter_col:
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# الصف الثاني: تحليل الشهر في صف مستقل بعرض كامل
 month = st.selectbox(t["select_month"], MONTHS, index=10, key="month_choice")
 render_panel(t["month"], month, year_data[year_data.Month == month], "month", is_full_row=True)
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# قسم المبيعات اليومية
 st.markdown(f'<div class="panel-heading">📅 {t["daily"]}</div>', unsafe_allow_html=True)
 daily = daily_data(sheets)
 if daily is not None and not daily.empty:
