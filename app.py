@@ -385,42 +385,42 @@ def render_panel(title, period, data, key, icon="📊", full_width=False):
                         )
 
 def parse_excel_date(series, target_year=2026):
-    """دالة قراءة وتصحيح التواريخ (مثل 13-Jun) وربطها بسنة الكشف المختارة مباشرة"""
-    s_str = series.astype(str).str.strip()
+    """دالة قراءة وتحويل التواريخ الذكية (تدعم صيغ DD-MMM مثل 11-Nov والأرقام التسلسلية) وربطها بالسنة المختارة"""
+    parsed = pd.to_datetime(series, errors="coerce")
     
-    # 1. محاولة قراءة صيغة اليوم والشهر النصية (مثل 13-Jun)
-    parsed_dm = pd.to_datetime(s_str, format='%d-%b', errors='coerce')
-    valid_dm = parsed_dm.notna()
-    
-    if valid_dm.any():
-        # تعيين السنة المختارة في اللوحة لتلك التواريخ
-        fixed_dates = parsed_dm.apply(lambda dt: dt.replace(year=int(target_year)) if pd.notna(dt) else pd.NaT)
-        parsed = fixed_dates
-    else:
-        parsed = pd.Series(pd.NaT, index=series.index)
+    # 1. فحص الأرقام التسلسلية للإكسس
+    numeric_vals = pd.to_numeric(series, errors="coerce")
+    serial_mask = numeric_vals.notna() & (numeric_vals > 1000)
+    if serial_mask.any():
+        serial_dates = pd.to_datetime(numeric_vals[serial_mask], unit="D", origin="1899-12-30", errors="coerce")
+        parsed.update(serial_dates)
         
-    # 2. إذا وجد محتوى آخر أو تواريخ قياسية أو أرقام تسلسلية
-    remaining_mask = parsed.isna()
-    if remaining_mask.any():
-        sub_series = series[remaining_mask]
-        parsed_std = pd.to_datetime(sub_series, errors="coerce", dayfirst=True)
-        numeric_vals = pd.to_numeric(sub_series, errors="coerce")
-        valid_serials = numeric_vals.notna() & (numeric_vals > 30000)
-        if valid_serials.sum() > parsed_std.notna().sum():
-            converted = pd.to_datetime(numeric_vals, unit="D", origin="1899-12-30", errors="coerce")
-            parsed_std = parsed_std.fillna(converted)
-            
-        # تصحيح السنوات إذا كانت قديمة أو خاطئة (أقل من 2020)
-        fix_years = parsed_std.notna() & (parsed_std.dt.year < 2020)
-        if fix_years.any():
-            parsed_std = parsed_std.apply(lambda dt: dt.replace(year=int(target_year)) if pd.notna(dt) and dt.year < 2020 else dt)
-            
-        parsed.update(parsed_std)
+    # 2. فحص القيم النصية مثل (13-Jun أو 11-Nov) غير المفسرة بشكل صحيح
+    unparsed_mask = parsed.isna() | (parsed.dt.year < 2000)
+    if unparsed_mask.any():
+        sub = series[unparsed_mask].astype(str).str.strip()
+        parsed_str = pd.to_datetime(sub, errors="coerce", dayfirst=True)
         
+        for idx in sub[parsed_str.isna() | (parsed_str.dt.year <= 1900)].index:
+            val = str(sub[idx])
+            try:
+                dt = pd.to_datetime(val, format='%d-%b', errors='coerce')
+                if pd.notna(dt):
+                    parsed_str.loc[idx] = dt.replace(year=int(target_year))
+            except:
+                pass
+                
+        valid_str = parsed_str.notna()
+        if valid_str.any():
+            parsed_str = parsed_str.apply(lambda dt: dt.replace(year=int(target_year)) if pd.notna(dt) else dt)
+            parsed.update(parsed_str)
+            
+    # الضبط النهائي لربط أي تاريخ بالسنة النشطة
+    parsed = parsed.apply(lambda dt: dt.replace(year=int(target_year)) if pd.notna(dt) else dt)
     return parsed
 
 def daily_data_from_sheet(sheets, active_year):
-    """سحب البيانات من شيت Data وتصحيح التواريخ بناءً على أعمدة J (التاريخ), D (مبلغ المبيعات), I (إجمالي المبيعات), F (العملاء)"""
+    """سحب البيانات من شيت Data بالاعتماد على الأعمدة: J (التاريخ), D (مبلغ المبيعات), I (إجمالي المبيعات), F (العملاء)"""
     name = next((n for n in sheets if n.strip().lower() == "data"), None)
     if not name:
         return None
