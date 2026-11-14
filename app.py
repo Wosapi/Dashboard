@@ -347,6 +347,33 @@ div[class*="st-key-hdr_"] div[data-baseweb="select"] svg {{
     fill:white !important;
 }}
 
+/* ---------- منع قص الدوائر والرسوم عند حواف الأعمدة ---------- */
+div[data-testid="stPlotlyChart"],
+div[data-testid="stPlotlyChart"] .js-plotly-plot,
+div[data-testid="stPlotlyChart"] .main-svg {{
+    overflow:visible !important;
+}}
+
+.pct-legend {{
+    display:flex;
+    flex-wrap:wrap;
+    gap:14px;
+    justify-content:center;
+    font-size:.78rem;
+    color:{C['muted']};
+    margin:2px 0 6px;
+}}
+
+.pct-legend span::before {{
+    content:"";
+    display:inline-block;
+    width:9px;
+    height:9px;
+    border-radius:50%;
+    margin-inline-end:5px;
+    background:var(--c);
+}}
+
 /* ---------- Dataframe / tabs / radio ---------- */
 div[data-testid="stDataFrame"] {{
     border:1px solid {C['border']};
@@ -622,7 +649,7 @@ def donut(actual, target, product, compact=False):
             sort=False,
             direction="clockwise",
             rotation=0,
-            domain=dict(x=[0.05, 0.95], y=y_domain),
+            domain=dict(x=[0.16, 0.84], y=y_domain),
             marker=dict(colors=[PCOLORS[product], C["gray"]], line=dict(color="white", width=1.2)),
             textinfo="none",
             hovertemplate=f"{product}<br>{label}<extra></extra>"
@@ -649,7 +676,7 @@ def donut(actual, target, product, compact=False):
     fig.update_layout(
         height=chart_height,
         showlegend=False,
-        margin=dict(l=2, r=2, t=2, b=2),
+        margin=dict(l=8, r=8, t=4, b=2),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)"
     )
@@ -702,6 +729,19 @@ def monthly_chart(month_df, holidays=()):
         textposition="inside", textfont=dict(color="white", size=10)
     )
 
+    # نسبة الإنجاز الشهرية (فعلي ÷ مستهدف) فوق كل شهر، بلون حالة الإنجاز
+    for _, r in base.iterrows():
+        tgt, act = r["Target"], r["Actual"]
+        if pd.notna(tgt) and tgt > 0 and pd.notna(act) and act > 0:
+            rate = act / tgt * 100
+            col = status_color(rate)
+            fig.add_annotation(
+                x=r["Month"], y=max(tgt, act), text=f"<b>{rate:.0f}%</b>",
+                showarrow=False, yshift=15,
+                font=dict(size=10.5, color=col),
+                bgcolor="white", bordercolor=col, borderwidth=1.2, borderpad=2
+            )
+
     for m in holidays:
         row = base[base.Month == m]
         y_val = float(row.Target.iloc[0]) if not row.empty and pd.notna(row.Target.iloc[0]) else 0.0
@@ -712,10 +752,15 @@ def monthly_chart(month_df, holidays=()):
         )
 
     fig.update_layout(
-        barmode="group", height=275, margin=dict(l=12, r=12, t=28, b=8),
+        barmode="group", height=300, margin=dict(l=12, r=12, t=34, b=8),
         plot_bgcolor="white", paper_bgcolor="white", font=dict(color=C["text"], size=11),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        xaxis=dict(showgrid=False), yaxis=dict(rangemode="tozero", gridcolor=C["gray"]),
+        xaxis=dict(showgrid=False),
+        yaxis=dict(
+            rangemode="tozero", gridcolor=C["gray"],
+            range=[0, float(np.nanmax(base[["Target", "Actual"]].to_numpy(dtype=float))) * 1.22]
+            if base[["Target", "Actual"]].notna().to_numpy().any() else None
+        ),
         bargap=.22, bargroupgap=.08
     )
 
@@ -1033,6 +1078,14 @@ st.plotly_chart(
     monthly_chart(month_summary, [m for m in month_summary.Month if m in HOLIDAY_MONTHS]),
     use_container_width=True,
     config={"displayModeBar": False}
+)
+st.markdown(
+    f'<div class="pct-legend">'
+    f'<span style="--c:{C["green"]}">{"تحقق المستهدف ≥ 100%" if lang == "ar" else "Target met ≥ 100%"}</span>'
+    f'<span style="--c:{C["amber"]}">{"قريب من المستهدف 80–99%" if lang == "ar" else "Near target 80–99%"}</span>'
+    f'<span style="--c:{C["red"]}">{"أقل من المستهدف < 80%" if lang == "ar" else "Below target < 80%"}</span>'
+    f'</div>',
+    unsafe_allow_html=True
 )
 st.markdown("<hr>", unsafe_allow_html=True)
 
