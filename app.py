@@ -373,40 +373,45 @@ div[data-testid="stPlotlyChart"] .main-svg {{
     background:var(--c);
 }}
 
-/* ---------- دوائر الإنجاز (شبكة SVG ثابتة لا تتبعثر) ---------- */
-.dn-grid {{
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-    align-items: center;
-    justify-items: center;
-    padding: 4px 0;
+/* ---------- دوائر الإنجاز (Flexbox ثابتي الارتفاع والعرض لمنع التداخل) ---------- */
+.dn-container {
     height: 232px;
-}}
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 2px 0;
+}
 
-.dn {{
+.dn-row {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    width: 100%;
+}
+
+.dn {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    width: 100%;
     text-align: center;
-}}
+    width: 48%;
+}
 
-.dn svg {{
+.dn svg {
     display: block;
-    width: 86px;
-    height: 86px;
-}}
+    width: 76px;
+    height: 76px;
+}
 
-.dn-sub {{
-    font-size: .66rem;
+.dn-sub {
+    font-size: .64rem;
     font-weight: 700;
     color: {C['muted']};
     direction: ltr;
     white-space: nowrap;
-    margin-top: 2px;
-}}
+    margin-top: 1px;
+}
 
 /* ---------- Dataframe / tabs / radio ---------- */
 div[data-testid="stDataFrame"] {{
@@ -670,20 +675,20 @@ def donut_html(actual, target, product):
     label_color = status_color(rate) if valid else C["muted"]
     ring_color = PCOLORS[product]
 
-    r = 35
+    r = 30
     circ = 2 * np.pi * r
     dash = circ * (clamped / 100.0)
 
     svg = (
-        f'<svg viewBox="0 0 88 88" width="86" height="86" xmlns="http://www.w3.org/2000/svg">'
-        f'<circle cx="44" cy="44" r="{r}" fill="none" stroke="{C["gray"]}" stroke-width="9"/>'
-        f'<circle cx="44" cy="44" r="{r}" fill="none" stroke="{ring_color}" stroke-width="9" '
+        f'<svg viewBox="0 0 76 76" width="76" height="76" xmlns="http://www.w3.org/2000/svg">'
+        f'<circle cx="38" cy="38" r="{r}" fill="none" stroke="{C["gray"]}" stroke-width="8"/>'
+        f'<circle cx="38" cy="38" r="{r}" fill="none" stroke="{ring_color}" stroke-width="8" '
         f'stroke-dasharray="{dash:.2f} {circ:.2f}" stroke-linecap="round" '
-        f'transform="rotate(-90 44 44)"/>'
-        f'<text x="44" y="39" text-anchor="middle" font-family="Tahoma, Arial, sans-serif" '
-        f'font-size="11" font-weight="700" fill="{C["muted"]}">{product}</text>'
-        f'<text x="44" y="54" text-anchor="middle" font-family="Tahoma, Arial, sans-serif" '
-        f'font-size="13" font-weight="800" fill="{label_color}">{label}</text>'
+        f'transform="rotate(-90 38 38)"/>'
+        f'<text x="38" y="34" text-anchor="middle" font-family="Tahoma, Arial, sans-serif" '
+        f'font-size="10" font-weight="700" fill="{C["muted"]}">{product}</text>'
+        f'<text x="38" y="47" text-anchor="middle" font-family="Tahoma, Arial, sans-serif" '
+        f'font-size="11.5" font-weight="800" fill="{label_color}">{label}</text>'
         f'</svg>'
     )
 
@@ -840,15 +845,18 @@ def render_panel_with_selector(title, options, default_idx, year_df, filter_col,
 
         with donuts_col:
             st.caption(f"🎯 {t['product_perf']} · {selected_val}")
-            cells = "".join(
-                donut_html(
-                    total(sub_data[sub_data.Product == product].Actual),
-                    total(sub_data[sub_data.Product == product].Target),
-                    product
-                )
-                for product in PRODUCTS
+            cell1 = donut_html(total(sub_data[sub_data.Product == PRODUCTS[0]].Actual), total(sub_data[sub_data.Product == PRODUCTS[0]].Target), PRODUCTS[0])
+            cell2 = donut_html(total(sub_data[sub_data.Product == PRODUCTS[1]].Actual), total(sub_data[sub_data.Product == PRODUCTS[1]].Target), PRODUCTS[1])
+            cell3 = donut_html(total(sub_data[sub_data.Product == PRODUCTS[2]].Actual), total(sub_data[sub_data.Product == PRODUCTS[2]].Target), PRODUCTS[2])
+            cell4 = donut_html(total(sub_data[sub_data.Product == PRODUCTS[3]].Actual), total(sub_data[sub_data.Product == PRODUCTS[3]].Target), PRODUCTS[3])
+            
+            st.markdown(
+                f'<div class="dn-container">'
+                f'<div class="dn-row">{cell1}{cell2}</div>'
+                f'<div class="dn-row">{cell3}{cell4}</div>'
+                f'</div>',
+                unsafe_allow_html=True
             )
-            st.markdown(f'<div class="dn-grid">{cells}</div>', unsafe_allow_html=True)
 
     return selected_val
 
