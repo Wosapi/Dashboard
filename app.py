@@ -54,7 +54,7 @@ TEXT = {
         "select_quarter": "🗓️ اختر الربع",
         "select_month": "📅 اختر الشهر",
         "sales_count": "عدد العمليات",
-        "total_i": "إجمالي (عمود I)",
+        "total_i": "إجمالي الكمية/القيمة",
         "customer_count": "عدد العملاء",
         "total_amount": "مبلغ المبيعات (SAR)",
         "period_display": "📅 الفترة النشطة:",
@@ -418,24 +418,43 @@ def parse_excel_date(series, target_year=2026):
     return parsed
 
 def daily_data_from_sheet(sheets, active_year):
-    """سحب البيانات الفعلية فقط من شيت Data واستبعاد الصفوف الفارغة أو المستقبلية الوهمية"""
+    """سحب البيانات الفعلية الذكية من شيت Data بالبحث عن الأعمدة بالاسم أو الفهرس الآمن"""
     name = next((n for n in sheets if n.strip().lower() == "data"), None)
     if not name:
         return None
     df = sheets[name].copy()
-    if df.shape[1] < 10:
+    if df.empty or df.shape[1] < 4:
         return None
     
+    # البحث الذكي عن الأعمدة بناءً على محتوى العناوين أو استخدام الأعمدة الافتراضية بأمان
+    col_date = None
+    col_amount = None
+    col_total_i = None
+    col_customer = None
+    
+    for c in df.columns:
+        c_str = str(c).lower().strip()
+        if any(x in c_str for x in ["date", "التاريخ"]):
+            col_date = c
+        elif any(x in c_str for x in ["amount", "مبلغ", "المبيعات"]):
+            col_amount = c
+        elif any(x in c_str for x in ["total", "إجمالي", "quanti"]):
+            col_total_i = c
+        elif any(x in c_str for x in ["customer", "عميل", "العملاء"]):
+            col_customer = c
+
     res = pd.DataFrame()
-    res["Parsed_Date"] = parse_excel_date(df.iloc[:, 9], target_year=active_year) # العمود J (التاريخ)
-    res["Amount"] = pd.to_numeric(df.iloc[:, 3], errors="coerce")       # العمود D (مبلغ المبيعات)
-    res["Total_I"] = pd.to_numeric(df.iloc[:, 8], errors="coerce")     # العمود I (الكمية)
-    res["Customer"] = df.iloc[:, 5]                                    # العمود F (أرقام العملاء)
+    
+    # تعيين الأعمدة بالطريقة الذكية أو الرجوع للفهارس القياسية إذا لزم الأمر
+    res["Parsed_Date"] = parse_excel_date(df[col_date] if col_date else df.iloc[:, min(9, df.shape[1]-1)], target_year=active_year)
+    res["Amount"] = pd.to_numeric(df[col_amount] if col_amount else df.iloc[:, min(3, df.shape[1]-1)], errors="coerce")
+    res["Total_I"] = pd.to_numeric(df[col_total_i] if col_total_i else df.iloc[:, min(8, df.shape[1]-1)], errors="coerce")
+    res["Customer"] = df[col_customer] if col_customer else df.iloc[:, min(5, df.shape[1]-1)]
     
     # 1. إزالة أي صف لا يحتوي على تاريخ صحيح
     res = res.dropna(subset=["Parsed_Date"]).copy()
     
-    # 2. فلترة قوية جداً: استبعاد الصفوف التي تكون فيها القيم فارغة أو أصفار تماماً
+    # 2. فلترة صارمة: استبعاد الصفوف الفارغة أو الأصفار تماماً
     has_customer = res["Customer"].notna() & (res["Customer"].astype(str).str.strip() != "") & (res["Customer"].astype(str).str.strip() != "nan")
     has_amount = res["Amount"].notna() & (res["Amount"] != 0)
     has_qty = res["Total_I"].notna() & (res["Total_I"] != 0)
