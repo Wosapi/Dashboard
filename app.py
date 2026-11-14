@@ -385,40 +385,16 @@ def render_panel(title, period, data, key, icon="📊", full_width=False):
                         )
 
 def parse_excel_date(series, target_year=2026):
-    """دالة قراءة وتحويل التواريخ بدقة لملفات الإكسيل"""
+    """قراءة وتحويل التواريخ وربطها بالسنة النشطة"""
     s_cleaned = series.astype(str).str.strip()
     parsed = pd.to_datetime(s_cleaned, errors="coerce", dayfirst=True)
     
-    unparsed_mask = parsed.isna() | (parsed.dt.year < 2000)
-    if unparsed_mask.any():
-        for idx in unparsed_mask[unparsed_mask].index:
-            val = s_cleaned[idx]
-            try:
-                dt = pd.to_datetime(val, errors='coerce')
-                if pd.notna(dt):
-                    if dt.year <= 1900 or dt.year == 1970:
-                        dt = dt.replace(year=int(target_year))
-                    parsed.loc[idx] = dt
-                else:
-                    parts = val.replace('/', '-').split('-')
-                    if len(parts) >= 2:
-                        day = int(parts[0])
-                        month_map = {'jan':1, 'feb':2, 'mar':3, 'apr':4, 'may':5, 'jun':6, 'jul':7, 'aug':8, 'sep':9, 'oct':10, 'nov':11, 'dec':12}
-                        m_str = parts[1].lower()[:3]
-                        if m_str in month_map:
-                            month = month_map[m_str]
-                            year = int(target_year)
-                            if len(parts) == 3 and len(parts[2]) > 0:
-                                yr_val = int(parts[2])
-                                year = yr_val if yr_val > 2000 else 2000 + yr_val
-                            parsed.loc[idx] = pd.Timestamp(year=year, month=month, day=day)
-            except:
-                pass
-                
+    # ربط التواريخ بالسنة النشطة المختارة في اللوحة (مثلاً 2026) لضمان مطابقتها للفلاتر
+    parsed = parsed.apply(lambda dt: dt.replace(year=int(target_year)) if pd.notna(dt) else dt)
     return parsed
 
 def daily_data_from_sheet(sheets, active_year):
-    """استخراج بيانات شيت Data باستخدام أسماء الأعمدة المحددة تماماً من الصورة"""
+    """استخراج بيانات شيت Data باستخدام الفهارس المباشرة المتوافقة مع تخطيط ملفك"""
     sheet_name = None
     for n in sheets:
         clean_n = n.strip().lower()
@@ -432,36 +408,25 @@ def daily_data_from_sheet(sheets, active_year):
         return None
         
     df = sheets[sheet_name].copy()
-    if df.empty:
+    if df.empty or df.shape[1] < 4:
         return None
     
-    # البحث عن الأعمدة بالأسماء الدقيقة الظاهرة في شيت Data
-    col_date, col_amount, col_total_q, col_customer = None, None, None, None
-    
-    for c in df.columns:
-        c_str = str(c).strip().lower()
-        if c_str == "date":
-            col_date = c
-        elif c_str == "amount":
-            col_amount = c
-        elif "total quant" in c_str:
-            col_total_q = c
-        elif "customer - no" in c_str or "customer" in c_str:
-            if not col_customer:
-                col_customer = c
-
     res = pd.DataFrame()
+    # الاعتماد على الفهارس المباشرة بناءً على صورتك (A=0 إلى I=8)
+    # العمود I (الفهرس 8) هو التاريخ
+    # العمود C (الفهرس 2) هو مبلغ المبيعات (Amount)
+    # العمود H (الفهرس 7) هو إجمالي الكميات (Total Quantities)
+    # العمود E (الفهرس 4) هو رقم العميل (Customer - No)
     
-    # ربط الأعمدة الفعلية أو الاحتياط الفهرسي بناءً على تخطيط ملفك
-    res["Parsed_Date"] = parse_excel_date(df[col_date] if col_date and col_date in df.columns else df.iloc[:, 8], target_year=active_year)
-    res["Amount"] = pd.to_numeric(df[col_amount] if col_amount and col_amount in df.columns else df.iloc[:, 2], errors="coerce")
-    res["Total_I"] = pd.to_numeric(df[col_total_q] if col_total_q and col_total_q in df.columns else df.iloc[:, 7], errors="coerce")
-    res["Customer"] = df[col_customer] if col_customer and col_customer in df.columns else df.iloc[:, 4]
+    res["Parsed_Date"] = parse_excel_date(df.iloc[:, min(8, df.shape[1]-1)], target_year=active_year)
+    res["Amount"] = pd.to_numeric(df.iloc[:, min(2, df.shape[1]-1)], errors="coerce")
+    res["Total_I"] = pd.to_numeric(df.iloc[:, min(7, df.shape[1]-1)], errors="coerce")
+    res["Customer"] = df.iloc[:, min(4, df.shape[1]-1)]
     
-    # 1. إزالة الصفوف التي ليس لها تاريخ صحيح
+    # إزالة الصفوف التي ليس لها تاريخ صحيح
     res = res.dropna(subset=["Parsed_Date"]).copy()
     
-    # 2. استبعاد الصفوف الفارغة أو الوهمية التي لا تحتوي على مبيعات حقيقية
+    # الاحتفاظ بالصفوف التي بها حركة مبيعات فعلية (مبلغ > 0 أو كمية > 0 أو رقم عميل موجود)
     has_customer = res["Customer"].notna() & (res["Customer"].astype(str).str.strip() != "") & (res["Customer"].astype(str).str.strip() != "nan")
     has_amount = res["Amount"].notna() & (res["Amount"] != 0)
     has_qty = res["Total_I"].notna() & (res["Total_I"] != 0)
