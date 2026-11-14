@@ -212,7 +212,7 @@ def convert_dfs_to_excel(sheets_dict):
             df.to_excel(writer, sheet_name=s_name[:31], index=False)
     return output.getvalue()
 
-# --- خانة رفع الملف (متاحة في الشريط الجانبي وفي الواجهة الرئيسية إن لم يتم الرفع) ---
+# --- خانة رفع الملف ---
 st.sidebar.header("📂 مصدر البيانات")
 uploaded_file = st.sidebar.file_uploader("ارفع ملف Excel (.xlsx أو .xlsb)", type=["xlsx", "xls", "xlsb"])
 
@@ -289,7 +289,7 @@ if sheets_dict is not None:
 
             st.markdown("---")
 
-            # --- 4. تفاصيل المبيعات الشهرية (كل شهر لوحده) ---
+            # --- 4. تفاصيل المبيعات الشهرية (كل شهر لوحده - بدون الجدول المزعج) ---
             st.subheader(f"🔍 تحليل الشهر الفردي المفصل (كل شهر لوحده) - {selected_year}")
             selected_single_month = st.selectbox("اختر الشهر لعرض تفاصيله الكاملة:", VALID_MONTHS, index=0)
             
@@ -311,18 +311,8 @@ if sheets_dict is not None:
             sm3.metric("نسبة تحقيق الشهر", f"{sm_ach:.1f}%" if pd.notna(sm_ach) else "—")
             sm4.metric("الفارق (Variance)", f"{sm_var:+,.2f}" if pd.notna(sm_var) else "—")
 
-            sc1, sc2 = st.columns([3, 2])
-            with sc1:
-                st.plotly_chart(plot_single_month_products(single_month_enriched, selected_single_month), use_container_width=True)
-            with sc2:
-                st.markdown(f"**جدول تفصيل منتجات شهر {selected_single_month}:**")
-                st.dataframe(
-                    single_month_enriched[["Product", "Target", "Actual", "Variance", "Remaining", "Achievement %"]].style.format(
-                        {"Target": "{:,.2f}", "Actual": "{:,.2f}", "Variance": "{:+,.2f}", "Remaining": "{:,.2f}", "Achievement %": "{:.1f}%"},
-                        na_rep="—"
-                    ),
-                    use_container_width=True
-                )
+            # عرض الرسم البياني للشهر الفردي بعرض الشاشة الكاملة
+            st.plotly_chart(plot_single_month_products(single_month_enriched, selected_single_month), use_container_width=True)
 
             st.markdown("---")
 
