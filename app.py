@@ -53,8 +53,8 @@ TEXT = {
         "select_half": "📆 اختر النصف",
         "select_quarter": "🗓️ اختر الربع",
         "select_month": "📅 اختر الشهر",
-        "daily_year": "📅 السنة",
-        "daily_month": "🗓️ الشهر",
+        "daily_year": "📅 سنة المبيعات اليومية",
+        "daily_month": "🗓️ شهر المبيعات اليومية",
         "value_col": "📊 عمود المبيعات",
         "all": "الكل",
         "na": "غير متاح",
@@ -89,8 +89,8 @@ TEXT = {
         "select_half": "📆 Select half-year",
         "select_quarter": "🗓️ Select quarter",
         "select_month": "📅 Select month",
-        "daily_year": "📅 Year",
-        "daily_month": "🗓️ Month",
+        "daily_year": "📅 Daily Sales Year",
+        "daily_month": "🗓️ Daily Sales Month",
         "value_col": "📊 Sales column",
         "all": "All",
         "na": "N/A",
@@ -103,37 +103,32 @@ st.markdown(f"""
 .block-container {{max-width:1600px; padding:1rem 1.25rem 2rem;}}
 h1,h2,h3,h4 {{color:{C['text']};}}
 div[data-testid="stMetric"] {{
-    background:white;
-    border:1px solid {C['border']};
-    border-radius:12px;
-    padding:10px 12px;
-    box-shadow:0 2px 8px rgba(16,45,80,.05);
-    min-height:84px;
+    background:white; border:1px solid {C['border']}; border-radius:12px;
+    padding:10px 12px; box-shadow:0 2px 8px rgba(16,45,80,.05); min-height:84px;
     transition: transform .15s ease;
 }}
 div[data-testid="stMetric"]:hover {{transform: translateY(-2px);}}
-div[data-testid="stMetricLabel"] {{color:{C['muted']};font-weight:700;font-size:.78rem;}}
-div[data-testid="stMetricValue"] {{color:{C['navy']};font-weight:800;font-size:clamp(1.05rem,1.7vw,1.55rem);}}
+div[data-testid="stMetricLabel"] {{color:{C['muted']}; font-weight:700; font-size:.78rem;}}
+div[data-testid="stMetricValue"] {{color:{C['navy']}; font-weight:800; font-size:clamp(1.05rem,1.7vw,1.55rem);}}
 .dashboard-header {{
     background:linear-gradient(112deg,#0C2747 0%,#173B63 68%,#0E8294 100%);
-    border-radius:15px;padding:18px 24px;color:white;margin-bottom:15px;
-    box-shadow:0 5px 16px rgba(16,45,80,.14);
-    display:flex;justify-content:space-between;align-items:center;gap:12px;
+    border-radius:15px; padding:18px 24px; color:white; margin-bottom:15px;
+    box-shadow:0 5px 16px rgba(16,45,80,.14); display:flex; justify-content:space-between; align-items:center; gap:12px;
 }}
-.dashboard-header h1 {{color:white!important;margin:0;font-size:clamp(1.2rem,2.4vw,2rem);}}
-.dashboard-header p {{color:#D6E4F1;margin:4px 0 0;font-size:.9rem;}}
-.year-pill {{color:white;font-weight:750;white-space:nowrap;padding:8px 14px;border:1px solid #ffffff38;border-radius:10px;background:#ffffff14;}}
+.dashboard-header h1 {{color:white!important; margin:0; font-size:clamp(1.2rem,2.4vw,2rem);}}
+.dashboard-header p {{color:#D6E4F1; margin:4px 0 0; font-size:.9rem;}}
+.year-pill {{color:white; font-weight:750; white-space:nowrap; padding:8px 14px; border:1px solid #ffffff38; border-radius:10px; background:#ffffff14;}}
 .section-heading {{
     background:linear-gradient(100deg,{C['navy']},{C['navy2']});
-    color:white;padding:10px 14px;border-radius:11px;margin:4px 0 10px;
-    font-size:1rem;font-weight:750;box-shadow:0 2px 6px rgba(16,45,80,.08);
+    color:white; padding:10px 14px; border-radius:11px; margin:4px 0 10px;
+    font-size:1rem; font-weight:750; box-shadow:0 2px 6px rgba(16,45,80,.08);
 }}
 .panel-heading {{
     background:linear-gradient(100deg,{C['navy']},{C['navy2']});
-    color:white;padding:10px 12px;border-radius:10px;margin:3px 0 10px;
-    font-weight:750;min-height:44px;display:flex;align-items:center;gap:6px;
+    color:white; padding:10px 12px; border-radius:10px; margin:3px 0 10px;
+    font-weight:750; min-height:44px; display:flex; align-items:center; gap:6px;
 }}
-hr {{border:0;border-top:1px solid {C['border']};margin:0.85rem 0;}}
+hr {{border:0; border-top:1px solid {C['border']}; margin:0.85rem 0;}}
 @media(max-width:700px) {{.block-container{{padding:.6rem .55rem 1.5rem;}} .dashboard-header{{padding:13px;}}}}
 </style>
 """, unsafe_allow_html=True)
@@ -234,7 +229,7 @@ def num(v):
 def pct(v):
     return "—" if pd.isna(v) else f"{v:.1f}%"
 
-# دوائر احترافية مصغّرة ومتناسقة 100% بدون أي قص أو تداخل في الربع والنصف السنوي أو الشهري
+# دوائر متناسقة ومضبوطة تماماً (compact=True للنصف والربع لتحسين التنسيق ومنع القص)
 def donut(actual, target, product, compact=False):
     valid = pd.notna(actual) and pd.notna(target) and target > 0
     rate = actual / target * 100 if valid else 0
@@ -242,7 +237,6 @@ def donut(actual, target, product, compact=False):
     remainder = max(100 - ring, 0.001) if rate < 100 else 0.001
     label = f"{rate:.1f}%" if valid else "N/A"
 
-    # ضبط الأبعاد بدقة لمنع قص الحلقة عند تصغير الأعمدة في الربع والنصف السنوي
     y_domain = [0.22, 0.98] if compact else [0.20, 0.98]
     chart_height = 112 if compact else 128
     center_y = 0.60 if compact else 0.59
@@ -483,39 +477,46 @@ with quarter_col:
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# الصف الثاني: تحليل الشهر في خانة مستقلة بعرض كامل
-month = st.selectbox(t["select_month"], MONTHS, index=10, key="month_choice")
-render_panel(t["month"], month, year_data[year_data.Month == month], "month", icon="📅", full_width=True)
+# الصف الثاني: تحليل الشهر بجانب تحليل المبيعات اليومية بشكل متناسق تماماً
+month_col, daily_col = st.columns(2, gap="medium")
 
-st.markdown("<hr>", unsafe_allow_html=True)
+with month_col:
+    month = st.selectbox(t["select_month"], MONTHS, index=10, key="month_choice")
+    render_panel(t["month"], month, year_data[year_data.Month == month], "month", icon="📅", full_width=False)
 
-# Daily sales
-st.markdown(f'<div class="section-heading">📅 {t["daily"]}</div>', unsafe_allow_html=True)
-daily = daily_data(sheets)
-if daily is not None and not daily.empty:
-    daily_years = sorted(daily.Parsed_Date.dt.year.dropna().unique().tolist())
-    d1, d2, d3 = st.columns(3)
-    with d1:
-        dy = st.selectbox(t["daily_year"], daily_years, index=len(daily_years) - 1)
-    dy_df = daily[daily.Parsed_Date.dt.year == dy].copy()
-    dy_df["Month_Name"] = dy_df.Parsed_Date.dt.strftime("%b")
-    with d2:
-        available = [m for m in MONTHS if m in dy_df.Month_Name.unique()]
-        dm = st.selectbox(t["daily_month"], [t["all"]] + available)
-    numeric = [c for c in dy_df.select_dtypes(include=[np.number]).columns if c not in ["Year", "Month", "Month_Num"]]
-    with d3:
-        value_col = st.selectbox(t["value_col"], numeric) if numeric else None
-    if dm != t["all"]:
-        dy_df = dy_df[dy_df.Month_Name == dm]
-    if value_col and not dy_df.empty:
-        dy_df["Date_Only"] = dy_df.Parsed_Date.dt.date
-        grouped = dy_df.groupby("Date_Only", as_index=False)[value_col].sum().sort_values("Date_Only")
-        fig = go.Figure(go.Bar(x=grouped.Date_Only, y=grouped[value_col], marker_color=C["teal"]))
-        fig.update_layout(height=260, margin=dict(l=10, r=10, t=10, b=10), plot_bgcolor="white", paper_bgcolor="white",
-                          yaxis=dict(gridcolor=C["gray"]))
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-else:
-    st.caption("ℹ️ لم يتم العثور على بيانات يومية قابلة للقراءة في شيت Sales Report.")
+with daily_col:
+    st.markdown(f'<div class="panel-heading">📅 {t["daily"]}</div>', unsafe_allow_html=True)
+    daily = daily_data(sheets)
+    if daily is not None and not daily.empty:
+        daily_years = sorted(daily.Parsed_Date.dt.year.dropna().unique().tolist())
+        d1, d2 = st.columns(2)
+        with d1:
+            dy = st.selectbox(t["daily_year"], daily_years, index=len(daily_years) - 1, key="daily_year_select")
+        dy_df = daily[daily.Parsed_Date.dt.year == dy].copy()
+        dy_df["Month_Name"] = dy_df.Parsed_Date.dt.strftime("%b")
+        with d2:
+            available = [m for m in MONTHS if m in dy_df.Month_Name.unique()]
+            dm = st.selectbox(t["daily_month"], [t["all"]] + available, key="daily_month_select")
+        numeric = [c for c in dy_df.select_dtypes(include=[np.number]).columns if c not in ["Year", "Month", "Month_Num"]]
+        value_col = st.selectbox(t["value_col"], numeric, key="daily_val_select") if numeric else None
+        
+        if dm != t["all"]:
+            dy_df = dy_df[dy_df.Month_Name == dm]
+        if value_col and not dy_df.empty:
+            dy_df["Date_Only"] = dy_df.Parsed_Date.dt.date
+            grouped = dy_df.groupby("Date_Only", as_index=False)[value_col].sum().sort_values("Date_Only")
+            fig = go.Figure(go.Bar(x=grouped.Date_Only, y=grouped[value_col], marker_color=C["teal"]))
+            fig.update_layout(
+                height=238, margin=dict(l=6, r=6, t=24, b=6),
+                plot_bgcolor="white", paper_bgcolor="white",
+                font=dict(color=C["text"], size=10),
+                xaxis=dict(showgrid=False), yaxis=dict(gridcolor=C["gray"], rangemode="tozero")
+            )
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        else:
+            st.info(t["no_data"])
+    else:
+        st.info("ℹ️ لم يتم العثور على بيانات يومية قابلة للقراءة في شيت Sales Report.")
 
 st.markdown("<hr>", unsafe_allow_html=True)
 st.markdown(f'<div class="section-heading">📋 {t["tables"]}</div>', unsafe_allow_html=True)
