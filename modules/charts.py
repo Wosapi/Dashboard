@@ -1,3 +1,4 @@
+import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from config import COLORS
@@ -24,7 +25,7 @@ def plot_monthly_target_vs_actual(monthly_df):
         font_color=COLORS["text"],
         margin=dict(l=20, r=20, t=40, b=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        yaxis_title="الكمية / المبيعات"
+        yaxis_title="الكمية"
     )
     return fig
 
