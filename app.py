@@ -89,7 +89,7 @@ TEXT = {
         "variance": "⚖️ الفرق",
         "product_perf": "أداء المنتجات",
         "total_chart": "الإجمالي (فعلي مقابل مستهدف)",
-        "daily": "جدول تحليل المبيعات اليومية (شيت Data)",
+        "daily": "جدول تحليل المبيعات اليومية",
         "tables": "الجداول التحليلية",
         "export": "تصدير التقارير",
         "download": "تحميل التقرير الشامل (Excel)",
@@ -103,6 +103,10 @@ TEXT = {
         "total_amount": "مبلغ المبيعات (SAR)",
         "all": "الكل",
         "na": "غير متاحة",
+        "holiday": "إجازة",
+        "holiday_note": "لا توجد مبيعات في شهر",
+        "no_sales_yet": "لا توجد مبيعات مسجلة بعد في شهر",
+        "footer": "العملة: ريال سعودي (SAR) · لوحة الأداء البيعي",
     },
 
     "en": {
@@ -127,7 +131,7 @@ TEXT = {
         "variance": "⚖️ Variance",
         "product_perf": "Products Performance",
         "total_chart": "Total (Actual vs Target)",
-        "daily": "Daily Sales Table Breakdown (Data Sheet)",
+        "daily": "Daily Sales Table Breakdown",
         "tables": "Detailed Analytical Tables",
         "export": "Export Reports",
         "download": "Download Comprehensive Report (Excel)",
@@ -141,12 +145,19 @@ TEXT = {
         "total_amount": "Sales Amount (SAR)",
         "all": "All",
         "na": "N/A",
+        "holiday": "Holiday",
+        "holiday_note": "No sales in",
+        "no_sales_yet": "No sales recorded yet in",
+        "footer": "Currency: Saudi Riyal (SAR) · Sales Performance Dashboard",
     },
 }
 
 # =========================================================
 # 2. CSS DESIGN
 # =========================================================
+# ملاحظة مهمة: تنسيق شريط العنوان الأزرق أصبح يعتمد على
+# st.container(key="hdr_...") بدل :has() حتى لا يتلوّن البانل كاملاً.
+# يتطلب Streamlit >= 1.39
 
 st.markdown(f"""
 <style>
@@ -189,7 +200,8 @@ div[data-testid="stMetricLabel"] {{
     font-size:.78rem;
 }}
 
-div[data-testid="stMetricLabel"] p {{
+div[data-testid="stMetricLabel"],
+div[data-testid="stMetricLabel"] * {{
     white-space:normal !important;
     overflow:visible !important;
     text-overflow:clip !important;
@@ -259,6 +271,33 @@ div[data-testid="stMetricValue"] {{
     min-height:44px;
     display:flex;
     align-items:center;
+}}
+
+.holiday-badge {{
+    background:#FEF3C7;
+    border:1px solid {C['orange']};
+    color:#92400E;
+    padding:10px 14px;
+    border-radius:10px;
+    font-weight:750;
+    font-size:0.92rem;
+    margin:6px 0 10px;
+    display:block;
+    text-align:center;
+}}
+
+/* إخفاء تذييل Streamlit الافتراضي */
+footer {{
+    visibility:hidden;
+}}
+
+.app-footer {{
+    text-align:center;
+    color:{C['muted']};
+    font-size:.78rem;
+    padding:14px 0 4px;
+    border-top:1px solid {C['border']};
+    margin-top:18px;
 }}
 
 /* ---------- Cards: كل بانل داخل بطاقة بيضاء ---------- */
@@ -517,6 +556,46 @@ def status_color(rate):
     return C["red"]
 
 
+def find_holiday_months(df):
+    """الأشهر التي لا توجد فيها مبيعات فعلية وتقع قبل آخر شهر فيه مبيعات (إجازة)."""
+    if df is None or df.empty:
+        return set()
+    m = summary(df, ["Month_Num", "Month"])
+    with_sales = m[m["Actual"].fillna(0) > 0]
+    if with_sales.empty:
+        return set()
+    last = with_sales["Month_Num"].max()
+    gap = m[(m["Month_Num"] < last) & (m["Actual"].fillna(0) <= 0)]
+    return set(gap["Month"].tolist())
+
+
+def style_table(df):
+    """تنسيق الجداول التحليلية: أرقام + تلوين الإنجاز والفرق."""
+    fmt = {
+        "Target": "{:,.2f}", "Actual": "{:,.2f}", "Variance": "{:,.2f}",
+        "Remaining": "{:,.2f}", "Achievement %": "{:.1f}%",
+    }
+    fmt = {k: v for k, v in fmt.items() if k in df.columns}
+    styler = df.style.format(fmt, na_rep="—")
+    apply_fn = styler.map if hasattr(styler, "map") else styler.applymap
+
+    def achievement_color(v):
+        if pd.isna(v):
+            return ""
+        return f"color:{status_color(v)}; font-weight:700"
+
+    def variance_color(v):
+        if pd.isna(v):
+            return ""
+        return f"color:{C['green'] if v >= 0 else C['red']}; font-weight:700"
+
+    if "Achievement %" in df.columns:
+        styler = apply_fn(achievement_color, subset=["Achievement %"])
+    if "Variance" in df.columns:
+        styler = apply_fn(variance_color, subset=["Variance"])
+    return styler
+
+
 # =========================================================
 # 7. CHARTS
 # =========================================================
@@ -604,7 +683,7 @@ def total_bar_chart(period_label, actual, target, height=235):
     return fig
 
 
-def monthly_chart(month_df):
+def monthly_chart(month_df, holidays=()):
     base = pd.DataFrame({"Month": MONTHS}).merge(
         month_df[["Month", "Target", "Actual"]], on="Month", how="left"
     )
@@ -623,8 +702,17 @@ def monthly_chart(month_df):
         textposition="inside", textfont=dict(color="white", size=10)
     )
 
+    for m in holidays:
+        row = base[base.Month == m]
+        y_val = float(row.Target.iloc[0]) if not row.empty and pd.notna(row.Target.iloc[0]) else 0.0
+        fig.add_annotation(
+            x=m, y=y_val, text=f"🏖️ {t['holiday']}", showarrow=False, yshift=16,
+            font=dict(size=11, color="#92400E"),
+            bgcolor="#FEF3C7", bordercolor=C["orange"], borderwidth=1, borderpad=3
+        )
+
     fig.update_layout(
-        barmode="group", height=275, margin=dict(l=12, r=12, t=12, b=8),
+        barmode="group", height=275, margin=dict(l=12, r=12, t=28, b=8),
         plot_bgcolor="white", paper_bgcolor="white", font=dict(color=C["text"], size=11),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         xaxis=dict(showgrid=False), yaxis=dict(rangemode="tozero", gridcolor=C["gray"]),
@@ -664,6 +752,13 @@ def render_panel_with_selector(title, options, default_idx, year_df, filter_col,
         if sub_data.empty:
             st.info(t["no_data"])
             return selected_val
+
+        if filter_col == "Month" and selected_val in HOLIDAY_MONTHS:
+            st.markdown(
+                f'<div class="holiday-badge">🏖️ ({t["holiday"]}) — {t["holiday_note"]} '
+                f'{MONTH_AR[selected_val] if lang == "ar" else selected_val}</div>',
+                unsafe_allow_html=True
+            )
 
         target = total(sub_data.Target)
         actual = total(sub_data.Actual)
@@ -898,6 +993,9 @@ st.markdown(f"""
 year_data = data[(data.Year == year) & data.Product.isin(chosen_products)].copy()
 filtered = year_data[year_data.Quarter.isin(chosen_quarters)].copy()
 
+# الأشهر التي لا توجد بها مبيعات (إجازة)
+HOLIDAY_MONTHS = find_holiday_months(year_data)
+
 
 # =========================================================
 # 17. EXECUTIVE KPIs
@@ -931,7 +1029,11 @@ k[5].metric(t["best_product"], best_product)
 
 st.markdown("<hr>", unsafe_allow_html=True)
 st.markdown(f'<div class="section-heading">📈 {t["monthly"]} {year}</div>', unsafe_allow_html=True)
-st.plotly_chart(monthly_chart(month_summary), use_container_width=True, config={"displayModeBar": False})
+st.plotly_chart(
+    monthly_chart(month_summary, [m for m in month_summary.Month if m in HOLIDAY_MONTHS]),
+    use_container_width=True,
+    config={"displayModeBar": False}
+)
 st.markdown("<hr>", unsafe_allow_html=True)
 
 
@@ -1008,6 +1110,11 @@ with daily_col:
                 else:
                     min_d = dy_filtered["Date_Only"].min()
                     max_d = dy_filtered["Date_Only"].max()
+
+                # شهر بلا مبيعات قبل آخر شهر فيه مبيعات = إجازة
+                is_holiday = (month in HOLIDAY_MONTHS) or (
+                    selected_month_number < int(year_daily["Month_Num"].max())
+                )
 
                 filter_mode = st.radio(
                     "طريقة العرض:",
@@ -1106,7 +1213,16 @@ with daily_col:
                     m2.metric(t["total_i"], num(daily_view["Total_I"].sum(min_count=1)))
                     m3.metric(t["total_amount"], num(daily_view["Amount"].sum(min_count=1)))
                 else:
-                    st.warning("لا توجد مبيعات في التاريخ المحدد.")
+                    month_label = MONTH_AR[month] if lang == "ar" else month
+                    if filter_mode == "الشهر كاملاً" and is_holiday:
+                        st.markdown(
+                            f'<div class="holiday-badge">🏖️ ({t["holiday"]}) — {t["holiday_note"]} {month_label}</div>',
+                            unsafe_allow_html=True
+                        )
+                    elif filter_mode == "الشهر كاملاً":
+                        st.info(f"{t['no_sales_yet']} {month_label}.")
+                    else:
+                        st.warning("لا توجد مبيعات في التاريخ المحدد.")
 
 
 # =========================================================
@@ -1124,10 +1240,7 @@ tab1, tab2, tab3 = st.tabs([
 
 with tab1:
     st.dataframe(
-        month_summary.drop(columns=["Month_Num"], errors="ignore").style.format(
-            {"Target": "{:,.2f}", "Actual": "{:,.2f}", "Variance": "{:,.2f}", "Remaining": "{:,.2f}", "Achievement %": "{:.1f}%"},
-            na_rep="—"
-        ),
+        style_table(month_summary.drop(columns=["Month_Num"], errors="ignore")),
         use_container_width=True,
         hide_index=True
     )
@@ -1135,10 +1248,7 @@ with tab1:
 with tab2:
     product_quarter = summary(filtered, ["Product", "Quarter"])
     st.dataframe(
-        product_quarter.style.format(
-            {"Target": "{:,.2f}", "Actual": "{:,.2f}", "Variance": "{:,.2f}", "Remaining": "{:,.2f}", "Achievement %": "{:.1f}%"},
-            na_rep="—"
-        ),
+        style_table(product_quarter),
         use_container_width=True,
         hide_index=True
     )
@@ -1146,10 +1256,7 @@ with tab2:
 with tab3:
     yearly = summary(data[data.Product.isin(chosen_products)], ["Year"])
     st.dataframe(
-        yearly.style.format(
-            {"Target": "{:,.2f}", "Actual": "{:,.2f}", "Variance": "{:,.2f}", "Remaining": "{:,.2f}", "Achievement %": "{:.1f}%"},
-            na_rep="—"
-        ),
+        style_table(yearly),
         use_container_width=True,
         hide_index=True
     )
@@ -1182,4 +1289,5 @@ st.download_button(
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     use_container_width=True
 )
- 
+
+st.markdown(f'<div class="app-footer">{t["footer"]}</div>', unsafe_allow_html=True)
