@@ -37,7 +37,7 @@ h1, h2, h3 { color: #142B4A; }
 """, unsafe_allow_html=True)
 
 st.title("📊 لوحة تحكم أداء المبيعات والتحليل المتقدم")
-st.markdown("تحليل شامل للمستهدف والمبيعات الفعلية (سنوي، ربعي، شهري مفصل لكل شهر، والمبيعات اليومية).")
+st.markdown("تحليل شامل للمستهدف والمبيعات الفعلية (سنوي، ربعي، شهري مفصل، والمبيعات اليومية).")
 
 # --- 1. محرك تحميل جميع الشيتات ---
 @st.cache_data
@@ -184,11 +184,30 @@ def plot_monthly_target_vs_actual(monthly_df):
     fig.update_layout(barmode="group", plot_bgcolor=COLORS["white"], paper_bgcolor=COLORS["white"], font_color=COLORS["text"], margin=dict(l=20, r=20, t=40, b=20), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
     return fig
 
-def plot_quarterly_comparison(quarterly_df):
-    fig = go.Figure()
-    fig.add_trace(go.Bar(x=quarterly_df["Quarter"], y=quarterly_df["Target"], name="مستهدف الربع", marker_color="#1E3A5F"))
-    fig.add_trace(go.Bar(x=quarterly_df["Quarter"], y=quarterly_df["Actual"], name="فعلي الربع", marker_color="#16A36A"))
-    fig.update_layout(barmode="group", plot_bgcolor=COLORS["white"], paper_bgcolor=COLORS["white"], font_color=COLORS["text"], margin=dict(l=20, r=20, t=30, b=20), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+def plot_quarterly_combined_chart(quarterly_df, q_product_df, quarter_name):
+    """تصميم احترافي مطابق للنموذج المطلوب: دوقات دائري بالمنتصف وأعمدة منتجات الربع تحته"""
+    prod_colors = {"Min": COLORS["dark_blue"], "Syn": COLORS["orange"], "DEO": COLORS["teal"], "Fluids": COLORS["navy_blue"]}
+    
+    # تحضير الرسم الدائري المجمع للربع
+    labels = q_product_df["Product"].tolist()
+    values = q_product_df["Actual"].fillna(0).tolist()
+    total_q_actual = sum(values)
+    total_q_target = q_product_df["Target"].sum()
+    q_ach = (total_q_actual / total_q_target * 100) if total_q_target > 0 else 0
+
+    fig = go.Figure(data=[go.Pie(
+        labels=labels, values=values, hole=0.65,
+        marker_colors=[prod_colors.get(p, COLORS["navy_blue"]) for p in labels],
+        textinfo="label+percent", hoverinfo="label+value+percent"
+    )])
+    
+    fig.update_layout(
+        title=f"أداء الربع {quarter_name} - إجمالي الإنجاز: {q_ach:.1f}%",
+        annotations=[dict(text=f"<b>{q_ach:.1f}%</b><br>إجمالي", x=0.5, y=0.5, font_size=16, showarrow=False)],
+        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=20, r=20, t=40, b=20), height=320,
+        showlegend=True
+    )
     return fig
 
 def create_donut_chart(percentage, color):
@@ -304,7 +323,6 @@ if sheets_dict is not None:
             sm3.metric("نسبة تحقيق الشهر", f"{sm_ach:.1f}%" if pd.notna(sm_ach) else "—")
             sm4.metric("الفارق (Variance)", f"{sm_var:+,.2f}" if pd.notna(sm_var) else "—")
 
-            # عرض المنتجات كبطاقات دائرية احترافية للشهر المحدد مع إخفاء شريط الأدوات
             st.markdown(f"**نسب تحقيق المنتجات لشهر {selected_single_month}:**")
             m_d_cols = st.columns(len(PRODUCTS))
             for idx, prod in enumerate(PRODUCTS):
@@ -321,12 +339,12 @@ if sheets_dict is not None:
 
             st.markdown("---")
 
-            # --- 5. تفاصيل المبيعات اليومية ---
+            # --- 5. تحليل المبيعات اليومية ---
             st.subheader("📅 تحليل المبيعات اليومية (Daily Sales Breakdown)")
             daily_sheets = detect_daily_sales_data(sheets_dict)
 
             if not daily_sheets:
-                st.info("لم يتم العثور على شيت يحتوي على تواريخ يومية داخل الملف المرفوع. الشيتات المتوفرة في الملف هي: " + "، ".join(sheets_dict.keys()))
+                st.info("لم يتم العثور على شيت يحتوي على تواريخ يومية داخل الملف المرفوع.")
             else:
                 chosen_daily_sheet = st.selectbox("اختر شيت البيانات اليومية:", list(daily_sheets.keys()))
                 daily_df, date_col_name = daily_sheets[chosen_daily_sheet]
@@ -380,15 +398,34 @@ if sheets_dict is not None:
 
             st.markdown("---")
 
-            # --- 6. التحليل الربعي ونصف السنوي ---
-            st.subheader("🗓️ التحليل الربعي ونصف السنوي")
-            q_summary = summarize_by_period(filtered_df, ["Quarter"])
-            h_summary = summarize_by_period(filtered_df, ["Half"])
-            qc1, qc2 = st.columns([3, 2])
-            with qc1: st.plotly_chart(plot_quarterly_comparison(q_summary), use_container_width=True, config={'displayModeBar': False})
+            # --- 6. التحليل الربعي المطابق للتصميم الاحترافي المطلوب ---
+            st.subheader("🗓️ التحليل الربعي (التصميم المتقدم المطابق)")
+            
+            selected_quarter = st.selectbox("اختر الربع السنوي للعرض الاحترافي:", ["Q1", "Q2", "Q3", "Q4"], index=0)
+            
+            q_data_df = clean_df[(clean_df["Year"] == selected_year) & (clean_df["Quarter"] == selected_quarter) & (clean_df["Product"].isin(selected_products))].copy()
+            q_prod_summary = summarize_by_period(q_data_df, ["Product"])
+
+            qc1, qc2 = st.columns([1, 1])
+            with qc1:
+                # عرض الرسم الدائري المجمع للربع الاحترافي
+                st.plotly_chart(plot_quarterly_combined_chart(q_data_df, q_prod_summary, selected_quarter), use_container_width=True, config={'displayModeBar': False})
             with qc2:
-                st.dataframe(q_summary.style.format({"Target": "{:,.2f}", "Actual": "{:,.2f}", "Achievement %": "{:.1f}%"}, na_rep="—"), use_container_width=True)
-                st.dataframe(h_summary.style.format({"Target": "{:,.2f}", "Actual": "{:,.2f}", "Achievement %": "{:.1f}%"}, na_rep="—"), use_container_width=True)
+                # جدول ملخص الربع
+                st.markdown(f"**ملخص أداء الربع {selected_quarter}:**")
+                st.dataframe(q_prod_summary.style.format({"Target": "{:,.2f}", "Actual": "{:,.2f}", "Variance": "{:+,.2f}", "Remaining": "{:,.2f}", "Achievement %": "{:.1f}%"}, na_rep="—"), use_container_width=True)
+
+            # عرض الأعمدة الشهرية الخاصة بالمنتجات تحت الربع (مطابق للنموذج)
+            st.markdown(f"**التفصيل الشهري لمنتجات الربع {selected_quarter}:**")
+            q_months = q_data_df["Month"].unique().tolist()
+            if q_months:
+                q_m_summary = summarize_by_period(q_data_df, ["Month_Num", "Month", "Product"]).sort_values(["Month_Num", "Product"])
+                fig_q_months = px.bar(
+                    q_m_summary, x="Month", y="Actual", color="Product", barmode="group",
+                    color_discrete_map=prod_colors, title=f"مقارنة المبيعات الفعلية لشهر الربع {selected_quarter}"
+                )
+                fig_q_months.update_layout(plot_bgcolor=COLORS["white"], paper_bgcolor=COLORS["white"], font_color=COLORS["text"])
+                st.plotly_chart(fig_q_months, use_container_width=True, config={'displayModeBar': False})
 
             st.markdown("---")
 
@@ -404,8 +441,8 @@ if sheets_dict is not None:
             export_sheets = {
                 "Monthly_All": m_summary.drop(columns=["Month_Num"]),
                 f"Month_{selected_single_month}": single_month_enriched.drop(columns=["Month_Num"]),
-                "Quarterly": q_summary,
-                "Half_Yearly": h_summary,
+                "Quarterly": summarize_by_period(filtered_df, ["Quarter"]),
+                "Half_Yearly": summarize_by_period(filtered_df, ["Half"]),
                 "Products": p_summary
             }
             if daily_sheets and 'daily_grouped' in locals():
