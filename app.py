@@ -54,7 +54,6 @@ def load_all_sheets(uploaded_file):
         sheets_dict = {}
         for name in xls.sheet_names:
             df_temp = pd.read_excel(xls, sheet_name=name)
-            # تنظيف الأعمدة المكررة لمنع أخطاء التجميع
             df_temp = df_temp.loc[:, ~df_temp.columns.duplicated()]
             sheets_dict[name] = df_temp
         return sheets_dict
@@ -127,30 +126,25 @@ def parse_target_sheet(raw_df):
         st.error(f"خطأ أثناء معالجة شيت Target: {e}")
         return None
 
-# --- 3. محرك استخراج وتحليل المبيعات اليومية (الآمن ضد الأعمدة المكررة) ---
+# --- 3. محرك استخراج وتحليل المبيعات اليومية من شيت Sales Report ---
 def detect_daily_sales_data(sheets_dict):
     candidate_sheets = {}
-    for sheet_name, df in sheets_dict.items():
-        if sheet_name == "Target" or df is None or df.empty:
-            continue
+    
+    # البحث المباشر عن شيت Sales Report
+    target_sheet_name = None
+    for name in sheets_dict.keys():
+        if name.strip().lower() == "sales report":
+            target_sheet_name = name
+            break
+            
+    if target_sheet_name is not None:
+        df = sheets_dict[target_sheet_name].copy()
+        clean_sheet = df.loc[:, ~df.columns.duplicated()]
         
-        clean_sheet = df.copy()
-        clean_sheet = clean_sheet.loc[:, ~clean_sheet.columns.duplicated()]
-        
-        for idx in range(min(10, len(clean_sheet))):
-            row_vals = [str(v).lower() for v in clean_sheet.iloc[idx].values if pd.notna(v)]
-            if any(k in " ".join(row_vals) for k in ["date", "تاريخ", "day", "يوم", "qty", "quantity", "sales", "amount", "ton", "volume", "مبيعات", "كمية"]):
-                clean_sheet.columns = clean_sheet.iloc[idx]
-                clean_sheet = clean_sheet.iloc[idx + 1:].reset_index(drop=True)
-                clean_sheet = clean_sheet.loc[:, ~clean_sheet.columns.duplicated()]
-                break
-
-        clean_sheet = clean_sheet.loc[:, clean_sheet.columns.notna()]
-        clean_sheet.columns = [str(c).strip() for c in clean_sheet.columns]
-        
+        # البحث عن عمود التاريخ داخل شيت Sales Report
         date_col = None
         for col in clean_sheet.columns:
-            col_l = col.lower()
+            col_l = str(col).lower()
             if any(k in col_l for k in ["date", "تاريخ", "day", "يوم"]):
                 s = clean_sheet[col]
                 try:
@@ -159,18 +153,41 @@ def detect_daily_sales_data(sheets_dict):
                     else:
                         parsed = pd.to_datetime(s, errors='coerce')
                     
-                    if parsed.notna().sum() >= 3:
+                    if parsed.notna().sum() >= 1:
                         clean_sheet["Parsed_Date"] = parsed
                         date_col = col
                         break
                 except Exception:
                     continue
         
+        # إذا لم يتم العثور على عمود تاريخ بالعنوان، نبحث في أول صفين
+        if date_col is None and not clean_sheet.empty:
+            for idx in range(min(5, len(clean_sheet))):
+                row_vals = [str(v).lower() for v in clean_sheet.iloc[idx].values if pd.notna(v)]
+                if any(k in " ".join(row_vals) for k in ["date", "تاريخ", "day", "يوم"]):
+                    clean_sheet.columns = clean_sheet.iloc[idx]
+                    clean_sheet = clean_sheet.iloc[idx + 1:].reset_index(drop=True)
+                    clean_sheet = clean_sheet.loc[:, ~clean_sheet.columns.duplicated()]
+                    break
+            
+            for col in clean_sheet.columns:
+                col_l = str(col).lower()
+                if any(k in col_l for k in ["date", "تاريخ", "day", "يوم"]):
+                    s = clean_sheet[col]
+                    try:
+                        parsed = pd.to_datetime(s, errors='coerce')
+                        if parsed.notna().sum() >= 1:
+                            clean_sheet["Parsed_Date"] = parsed
+                            date_col = col
+                            break
+                    except Exception:
+                        continue
+
         if date_col is not None:
             valid_daily = clean_sheet.dropna(subset=["Parsed_Date"]).copy()
             valid_daily = valid_daily[(valid_daily["Parsed_Date"].dt.year >= 2020) & (valid_daily["Parsed_Date"].dt.year <= 2030)]
             if not valid_daily.empty:
-                candidate_sheets[sheet_name] = (valid_daily, date_col)
+                candidate_sheets[target_sheet_name] = (valid_daily, date_col)
                 
     return candidate_sheets
 
@@ -326,14 +343,14 @@ if sheets_dict is not None:
 
             st.markdown("---")
 
-            # --- 5. تفاصيل المبيعات اليومية ---
+            # --- 5. تفاصيل المبيعات اليومية من شيت Sales Report ---
             st.subheader("📅 تحليل المبيعات اليومية (Daily Sales Breakdown)")
             daily_sheets = detect_daily_sales_data(sheets_dict)
 
             if not daily_sheets:
-                st.info("لم يتم العثور على شيت يحتوي على تواريخ يومية داخل الملف المرفوع.")
+                st.info("لم يتم العثور على شيت باسم 'Sales Report' في الملف المرفق، أو أن الشيت لا يحتوي على عمود تاريخ صالح.")
             else:
-                chosen_daily_sheet = st.selectbox("اختر شيت البيانات اليومية:", list(daily_sheets.keys()))
+                chosen_daily_sheet = list(daily_sheets.keys())[0]
                 daily_df, date_col_name = daily_sheets[chosen_daily_sheet]
 
                 daily_years = sorted(daily_df["Parsed_Date"].dt.year.unique().tolist())
@@ -348,7 +365,7 @@ if sheets_dict is not None:
                     avail_d_months = ["الكل"] + [m for m in VALID_MONTHS if m in daily_year_df["Month_Name"].unique()]
                     d_month = st.selectbox("تصفية بشهر معين (يومي):", avail_d_months)
                 
-                numeric_cols = [c for c in daily_year_df.select_dtypes(include=[np.number]).columns if c not in ["Year", "Month"]]
+                numeric_cols = [c for c in daily_year_df.select_dtypes(include=[np.number]).columns if c not in ["Year", "Month", "Parsed_Date"]]
                 with d_col_f3:
                     val_col = st.selectbox("اختر عمود القيمة / الكمية:", numeric_cols) if numeric_cols else None
 
@@ -377,6 +394,9 @@ if sheets_dict is not None:
                     )
                     fig_daily.update_layout(plot_bgcolor=COLORS["white"], paper_bgcolor=COLORS["white"], xaxis_title="التاريخ", yaxis_title=val_col)
                     st.plotly_chart(fig_daily, use_container_width=True, config={'displayModeBar': False})
+                    
+                    with st.expander("عرض سجل الحركات اليومية التفصيلي"):
+                        st.dataframe(daily_year_df.drop(columns=["Parsed_Date", "Date_Only"], errors="ignore"), use_container_width=True)
                 else:
                     st.dataframe(daily_year_df.drop(columns=["Parsed_Date"], errors="ignore"), use_container_width=True)
 
