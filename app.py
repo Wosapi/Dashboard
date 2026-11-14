@@ -53,7 +53,6 @@ TEXT = {
         "select_half": "📆 اختر النصف",
         "select_quarter": "🗓️ اختر الربع",
         "select_month": "📅 اختر الشهر",
-        "daily_date": "📅 تاريخ المبيعات باليوم",
         "sales_count": "عدد العمليات",
         "total_i": "إجمالي (عمود I)",
         "customer_count": "عدد العملاء",
@@ -91,7 +90,6 @@ TEXT = {
         "select_half": "📆 Select half-year",
         "select_quarter": "🗓️ Select quarter",
         "select_month": "📅 Select month",
-        "daily_date": "📅 Sales Date (Day)",
         "sales_count": "Transactions",
         "total_i": "Total (Col I)",
         "customer_count": "Customers",
@@ -380,7 +378,7 @@ def render_panel(title, period, data, key, icon="📊", full_width=False):
                         )
 
 def daily_data_from_sheet(sheets):
-    """سحب البيانات من شيت Data بالاعتماد على الأعمدة المطلوبة: D (مبلغ المبيعات), I (إجمالي المبيعات), J (التاريخ), F (أرقام العملاء)"""
+    """سحب البيانات من شيت Data بالاعتماد على الأعمدة: D (مبلغ المبيعات), I (إجمالي المبيعات), J (التاريخ), F (أرقام العملاء)"""
     name = next((n for n in sheets if n.strip().lower() == "data"), None)
     if not name:
         return None
@@ -388,11 +386,15 @@ def daily_data_from_sheet(sheets):
     if df.shape[1] < 10:
         return None
     
+    parsed = pd.to_datetime(df.iloc[:, 9], errors="coerce") # العمود J (التاريخ)
+    if parsed.notna().sum() == 0 and pd.api.types.is_numeric_dtype(df.iloc[:, 9]):
+        parsed = pd.to_datetime(df.iloc[:, 9], unit="D", origin="1899-12-30", errors="coerce")
+        
     res = pd.DataFrame()
-    res["Parsed_Date"] = pd.to_datetime(df.iloc[:, 9], errors="coerce") # العمود J (index 9)
-    res["Amount"] = pd.to_numeric(df.iloc[:, 3], errors="coerce")       # العمود D (index 3)
-    res["Total_I"] = pd.to_numeric(df.iloc[:, 8], errors="coerce")     # العمود I (index 8)
-    res["Customer"] = df.iloc[:, 5]                                    # العمود F (index 5)
+    res["Parsed_Date"] = parsed
+    res["Amount"] = pd.to_numeric(df.iloc[:, 3], errors="coerce")       # العمود D
+    res["Total_I"] = pd.to_numeric(df.iloc[:, 8], errors="coerce")     # العمود I
+    res["Customer"] = df.iloc[:, 5]                                    # العمود F
     
     return res.dropna(subset=["Parsed_Date"]).copy()
 
@@ -482,7 +484,7 @@ with quarter_col:
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# الصف الثاني: تحليل الشهر بجانب جدول تحليل المبيعات اليومية من شيت Data (بتاريخ المبيعات باليوم مباشرة)
+# الصف الثاني: تحليل الشهر بجانب جدول تحليل المبيعات اليومية المرن من شيت Data
 month_col, daily_col = st.columns(2, gap="medium")
 
 with month_col:
@@ -493,24 +495,47 @@ with daily_col:
     st.markdown(f'<div class="panel-heading">📋 {t["daily"]}</div>', unsafe_allow_html=True)
     daily_df = daily_data_from_sheet(sheets)
     if daily_df is not None and not daily_df.empty:
-        # فلترة البيانات بناءً على سنة الكشف المختارة في الأعلى تلقائياً
         dy_filtered = daily_df[daily_df.Parsed_Date.dt.year == year].copy()
         
         if not dy_filtered.empty:
             dy_filtered["Date_Only"] = dy_filtered.Parsed_Date.dt.date
+            min_d = dy_filtered["Date_Only"].min()
+            max_d = dy_filtered["Date_Only"].max()
             
-            # استخراج قائمة التواريخ المتاحة للبحث والاختيار المباشر
-            all_dates = sorted(dy_filtered["Date_Only"].unique().tolist(), reverse=True)
-            date_options = [t["all"]] + [str(d) for d in all_dates]
+            # خيارات مرنة متعددة لاختيار التاريخ اليومي (الكل، يوم محدد، أو نطاق تاريخي)
+            filter_mode = st.radio(
+                "طريقة العرض:" if lang == "ar" else "Filter mode:",
+                ["جميع الأيام", "تاريخ محدد", "نطاق تاريخي"],
+                horizontal=True,
+                key="daily_filter_mode"
+            )
             
-            # خيار اختيار تاريخ المبيعات باليوم مباشرة
-            selected_day = st.selectbox(t["daily_date"], date_options, key="daily_date_select")
-                
-            if selected_day != t["all"]:
-                dy_filtered = dy_filtered[dy_filtered["Date_Only"].astype(str) == selected_day]
+            if filter_mode == "تاريخ محدد":
+                selected_date = st.date_input(
+                    "اختر اليوم المطلوبة:" if lang == "ar" else "Select Date:",
+                    value=max_d if pd.notna(max_d) else None,
+                    min_value=min_d if pd.notna(min_d) else None,
+                    max_value=max_d if pd.notna(max_d) else None,
+                    key="daily_single_date"
+                )
+                if selected_date:
+                    dy_filtered = dy_filtered[dy_filtered["Date_Only"] == selected_date]
+                    
+            elif filter_mode == "نطاق تاريخي":
+                date_range = st.date_input(
+                    "اختر نطاق التواريخ:" if lang == "ar" else "Select Date Range:",
+                    value=(min_d, max_d) if pd.notna(min_d) and pd.notna(max_d) else (None, None),
+                    key="daily_date_range"
+                )
+                if isinstance(date_range, tuple) and len(date_range) == 2:
+                    start_d, end_d = date_range
+                    if start_d and end_d:
+                        dy_filtered = dy_filtered[
+                            (dy_filtered["Date_Only"] >= start_d) & 
+                            (dy_filtered["Date_Only"] <= end_d)
+                        ]
             
             if not dy_filtered.empty:
-                # تجميع البيانات حسب التاريخ باستخدام الأعمدة المطلوبة
                 grouped_daily = dy_filtered.groupby("Date_Only", as_index=False).agg(
                     Sales_Count=("Amount", "count"),
                     Total_I_Sum=("Total_I", "sum"),
@@ -518,7 +543,6 @@ with daily_col:
                     Total_Amount=("Amount", "sum")
                 ).sort_values("Date_Only", ascending=False)
                 
-                # عرض جدول المبيعات اليومية بشكل مرتب
                 st.dataframe(
                     grouped_daily.rename(columns={
                         "Date_Only": "التاريخ",
@@ -532,12 +556,12 @@ with daily_col:
                     }),
                     use_container_width=True,
                     hide_index=True,
-                    height=245
+                    height=220
                 )
             else:
-                st.info(t["no_data"])
+                st.warning(t["no_data"])
         else:
-            st.info(t["no_data"])
+            st.warning(t["no_data"])
     else:
         st.info("ℹ️ لم يتم العثور على شيت Data أو أن الأعمدة المطلوبة غير متوفرة بشكل صحيح.")
 
