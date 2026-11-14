@@ -420,7 +420,7 @@ def parse_excel_date(series, target_year=2026):
     return parsed
 
 def daily_data_from_sheet(sheets, active_year):
-    """سحب البيانات من شيت Data بالاعتماد على الأعمدة: J (التاريخ), D (مبلغ المبيعات), I (إجمالي المبيعات), F (العملاء)"""
+    """سحب البيانات الفعلية فقط من شيت Data واستبعاد الصفوف المستقبلية/الفارغة"""
     name = next((n for n in sheets if n.strip().lower() == "data"), None)
     if not name:
         return None
@@ -431,10 +431,20 @@ def daily_data_from_sheet(sheets, active_year):
     res = pd.DataFrame()
     res["Parsed_Date"] = parse_excel_date(df.iloc[:, 9], target_year=active_year) # العمود J (التاريخ)
     res["Amount"] = pd.to_numeric(df.iloc[:, 3], errors="coerce")       # العمود D (مبلغ المبيعات)
-    res["Total_I"] = pd.to_numeric(df.iloc[:, 8], errors="coerce")     # العمود I (إجمالي المبيعات)
+    res["Total_I"] = pd.to_numeric(df.iloc[:, 8], errors="coerce")     # العمود I (الكمية)
     res["Customer"] = df.iloc[:, 5]                                    # العمود F (أرقام العملاء)
     
-    return res.dropna(subset=["Parsed_Date"]).copy()
+    # استبعاد الصفوف التي ليس لها تاريخ
+    res = res.dropna(subset=["Parsed_Date"]).copy()
+    
+    # فلترة مهمة: الإبقاء فقط على الصفوف التي تحتوي على حركة بيع فعلية
+    has_customer = res["Customer"].notna() & (res["Customer"].astype(str).str.strip() != "")
+    has_amount = res["Amount"].fillna(0) > 0
+    has_qty = res["Total_I"].fillna(0) > 0
+    
+    res = res[has_customer | has_amount | has_qty].copy()
+    
+    return res
 
 def excel_bytes(sheet_map):
     output = io.BytesIO()
