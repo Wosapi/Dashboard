@@ -1,4 +1,3 @@
-
 import io
 import numpy as np
 import pandas as pd
@@ -808,7 +807,8 @@ def render_panel(
     data,
     key,
     icon="📊",
-    full_width=False
+    full_width=False,
+    selector_widget=None
 ):
 
     st.markdown(
@@ -816,6 +816,9 @@ def render_panel(
         f'{icon} {title} ({period})</div>',
         unsafe_allow_html=True
     )
+
+    if selector_widget is not None:
+        selector_widget()
 
     if data.empty:
         st.info(t["no_data"])
@@ -1647,6 +1650,14 @@ month_col, daily_col = st.columns(
 
 with month_col:
 
+    current_month = st.session_state.get("month_choice", MONTHS[10])
+
+    st.markdown(
+        f'<div class="panel-heading">'
+        f'📅 {t["month"]} ({current_month})</div>',
+        unsafe_allow_html=True
+    )
+
     month = st.selectbox(
         t["select_month"],
         MONTHS,
@@ -1654,15 +1665,46 @@ with month_col:
         key="month_choice"
     )
 
-    render_panel(
-        t["month"],
-        month,
-        year_data[
-            year_data.Month == month
-        ],
-        "month",
-        icon="📅"
-    )
+    month_filtered = year_data[year_data.Month == month]
+
+    if month_filtered.empty:
+        st.info(t["no_data"])
+    else:
+        m_target = total(month_filtered.Target)
+        m_actual = total(month_filtered.Actual)
+        m_variance = m_actual - m_target if pd.notna(m_actual) and pd.notna(m_target) else np.nan
+        m_rate = m_actual / m_target * 100 if pd.notna(m_actual) and pd.notna(m_target) and m_target > 0 else np.nan
+
+        ma, mb, mc, md = st.columns(4)
+        ma.metric(t["variance"], num(m_variance))
+        mb.metric(t["achievement"], pct(m_rate))
+        mc.metric(t["actual"], num(m_actual))
+        md.metric(t["target"], num(m_target))
+
+        bar_col, donuts_col = st.columns([1, 1.4], gap="small")
+
+        with bar_col:
+            st.caption(f"📊 {t['total_chart']}")
+            st.plotly_chart(
+                total_bar_chart(month, m_actual, m_target, height=238),
+                use_container_width=True,
+                config={"displayModeBar": False, "staticPlot": True},
+                key="month_bar"
+            )
+
+        with donuts_col:
+            st.caption(f"🎯 {t['product_perf']} · {month}")
+            for products_row in (PRODUCTS[:2], PRODUCTS[2:]):
+                cols = st.columns(2, gap="small")
+                for col, product in zip(cols, products_row):
+                    subset = month_filtered[month_filtered.Product == product]
+                    with col:
+                        st.plotly_chart(
+                            donut(total(subset.Actual), total(subset.Target), product, compact=True),
+                            use_container_width=True,
+                            config={"displayModeBar": False, "staticPlot": True},
+                            key=f"month_{product}"
+                        )
 
 
 # -------------------------
