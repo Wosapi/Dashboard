@@ -374,6 +374,72 @@ div[data-testid="stPlotlyChart"] .main-svg {{
     background:var(--c);
 }}
 
+/* ---------- دوائر الإنجاز (شبكة 2×2 بنفس ارتفاع عمود الرسم) ---------- */
+.dn-grid {{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    grid-template-rows:1fr 1fr;
+    gap:6px 8px;
+    height:232px;
+    align-items:center;
+    justify-items:center;
+}}
+
+.dn {{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:5px;
+    width:100%;
+}}
+
+.dn-ring {{
+    position:relative;
+    width:min(84px, 82%);
+    aspect-ratio:1 / 1;
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}}
+
+.dn-ring::before {{
+    content:"";
+    position:absolute;
+    inset:10px;
+    border-radius:50%;
+    background:{C['white']};
+    box-shadow:inset 0 0 0 1px {C['border']};
+}}
+
+.dn-center {{
+    position:relative;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    line-height:1.2;
+    direction:ltr;
+}}
+
+.dn-center b {{
+    font-size:.62rem;
+    color:{C['muted']};
+    font-weight:700;
+}}
+
+.dn-center span {{
+    font-size:.78rem;
+    font-weight:800;
+}}
+
+.dn-sub {{
+    font-size:.64rem;
+    font-weight:700;
+    color:{C['muted']};
+    direction:ltr;
+    white-space:nowrap;
+}}
+
 /* ---------- Dataframe / tabs / radio ---------- */
 div[data-testid="stDataFrame"] {{
     border:1px solid {C['border']};
@@ -684,6 +750,25 @@ def donut(actual, target, product, compact=False):
     return fig
 
 
+def donut_html(actual, target, product):
+    """دائرة إنجاز كاملة بـ CSS (تتكيف مع عرض العمود ولا تُقص أبداً)."""
+    valid = pd.notna(actual) and pd.notna(target) and target > 0
+    rate = actual / target * 100 if valid else 0.0
+    deg = max(0.0, min(rate, 100.0)) * 3.6
+    label = f"{rate:.1f}%" if valid else "N/A"
+    label_color = status_color(rate) if valid else C["muted"]
+    ring_color = PCOLORS[product]
+    ring_bg = f"conic-gradient({ring_color} 0deg {deg:.1f}deg, {C['gray']} {deg:.1f}deg 360deg)"
+    return (
+        f'<div class="dn" title="{product}: {label}">'
+        f'<div class="dn-ring" style="background:{ring_bg}">'
+        f'<div class="dn-center"><b>{product}</b>'
+        f'<span style="color:{label_color}">{label}</span></div></div>'
+        f'<div class="dn-sub">{num(actual)} / {num(target)}</div>'
+        f'</div>'
+    )
+
+
 def total_bar_chart(period_label, actual, target, height=235):
     fig = go.Figure()
 
@@ -829,17 +914,15 @@ def render_panel_with_selector(title, options, default_idx, year_df, filter_col,
 
         with donuts_col:
             st.caption(f"🎯 {t['product_perf']} · {selected_val}")
-            for products_row in (PRODUCTS[:2], PRODUCTS[2:]):
-                cols = st.columns(2, gap="small")
-                for col, product in zip(cols, products_row):
-                    subset = sub_data[sub_data.Product == product]
-                    with col:
-                        st.plotly_chart(
-                            donut(total(subset.Actual), total(subset.Target), product, compact=True),
-                            use_container_width=True,
-                            config={"displayModeBar": False, "staticPlot": True},
-                            key=f"{key}_{product}"
-                        )
+            cells = "".join(
+                donut_html(
+                    total(sub_data[sub_data.Product == product].Actual),
+                    total(sub_data[sub_data.Product == product].Target),
+                    product
+                )
+                for product in PRODUCTS
+            )
+            st.markdown(f'<div class="dn-grid">{cells}</div>', unsafe_allow_html=True)
 
     return selected_val
 
