@@ -1,142 +1,217 @@
-def daily_data_from_sheet(sheets, active_year=None):
-    """
-    استخراج المبيعات اليومية من شيت Data.
-    يعتمد على أسماء الأعمدة، مع دعم ترتيب الأعمدة الأصلي.
-    """
+# الصف الثاني: تحليل الشهر والمبيعات اليومية
+month_col, daily_col = st.columns(2, gap="medium")
 
-    # البحث عن شيت Data
-    sheet_name = next(
-        (
-            n for n in sheets
-            if n.strip().lower() in ["data", "بيانات", "البيانات"]
-        ),
-        None
+with month_col:
+
+    month = st.selectbox(
+        t["select_month"],
+        MONTHS,
+        index=10,
+        key="month_choice"
     )
 
-    if sheet_name is None:
-        return None
+    render_panel(
+        t["month"],
+        month,
+        year_data[year_data.Month == month],
+        "month",
+        icon="📅",
+        full_width=False
+    )
 
-    df = sheets[sheet_name].copy()
 
-    if df.empty or df.shape[1] < 9:
-        return None
+with daily_col:
 
-    # تنظيف أسماء الأعمدة
-    def clean_name(name):
-        return (
-            str(name)
-            .strip()
-            .lower()
-            .replace(" ", "")
-            .replace("_", "")
-            .replace("-", "")
+    st.markdown(
+        f'<div class="panel-heading">📋 {t["daily"]}</div>',
+        unsafe_allow_html=True
+    )
+
+    daily_df = daily_data_from_sheet(
+        sheets,
+        active_year=year
+    )
+
+    if daily_df is None or daily_df.empty:
+
+        st.warning(
+            "⚠️ لم يتم العثور على بيانات صحيحة في شيت Data. "
+            "تأكد من وجود الأعمدة Amount وDate."
         )
 
-    headers = {clean_name(c): c for c in df.columns}
+    else:
 
-    # البحث عن الأعمدة حسب الاسم
-    def find_column(names, fallback_index):
-        for name in names:
-            key = clean_name(name)
-            if key in headers:
-                return headers[key]
+        # فلترة السنة الفعلية دون تغيير التواريخ
+        dy_filtered = daily_df[
+            daily_df["Parsed_Date"].dt.year == int(year)
+        ].copy()
 
-        # الرجوع إلى ترتيب الأعمدة في صورة Excel
-        if fallback_index < len(df.columns):
-            return df.columns[fallback_index]
+        # فلترة الشهر المختار
+        dy_filtered = dy_filtered[
+            dy_filtered["Parsed_Date"].dt.month
+            == MONTHS.index(month) + 1
+        ].copy()
 
-        return None
+        if dy_filtered.empty:
 
-    amount_col = find_column(
-        ["Amount"], 2
-    )
+            st.info(
+                f"لا توجد مبيعات خلال {month} لعام {year}."
+            )
 
-    invoice_col = find_column(
-        ["Invoice No", "Invoice Number"], 3
-    )
+        else:
 
-    customer_col = find_column(
-        ["Customer - No", "Customer No", "Customer-No"], 4
-    )
+            min_d = dy_filtered["Date_Only"].min().date()
+            max_d = dy_filtered["Date_Only"].max().date()
 
-    quantity_col = find_column(
-        ["Total Quantities", "Total Quantity"], 7
-    )
+            st.markdown(
+                f'<div class="period-badge">'
+                f'📅 {month} {year} | من {min_d} إلى {max_d}'
+                f'</div>',
+                unsafe_allow_html=True
+            )
 
-    date_col = find_column(
-        ["Date", "Sales Date", "Invoice Date"], 8
-    )
+            filter_mode = st.radio(
+                "طريقة عرض المبيعات:",
+                [
+                    "جميع الأيام",
+                    "تاريخ محدد",
+                    "نطاق تاريخي"
+                ],
+                horizontal=True,
+                key="daily_filter_mode"
+            )
 
-    if date_col is None:
-        return None
+            if filter_mode == "تاريخ محدد":
 
-    # تحويل البيانات إلى جدول موحد
-    res = pd.DataFrame(index=df.index)
+                selected_date = st.date_input(
+                    "اختر تاريخ المبيعات:",
+                    value=max_d,
+                    min_value=min_d,
+                    max_value=max_d,
+                    key="daily_single_date"
+                )
 
-    res["Parsed_Date"] = parse_excel_date(df[date_col])
+                dy_filtered = dy_filtered[
+                    dy_filtered["Date_Only"].dt.date
+                    == selected_date
+                ]
 
-    def to_number(series):
-        return pd.to_numeric(
-            series.astype(str)
-            .str.replace(",", "", regex=False)
-            .str.replace(" ", "", regex=False)
-            .str.replace("SAR", "", regex=False),
-            errors="coerce"
-        )
+            elif filter_mode == "نطاق تاريخي":
 
-    res["Amount"] = (
-        to_number(df[amount_col])
-        if amount_col is not None
-        else np.nan
-    )
+                date_range = st.date_input(
+                    "اختر فترة المبيعات:",
+                    value=(min_d, max_d),
+                    min_value=min_d,
+                    max_value=max_d,
+                    key="daily_date_range"
+                )
 
-    res["Total_I"] = (
-        to_number(df[quantity_col])
-        if quantity_col is not None
-        else np.nan
-    )
+                if isinstance(date_range, (tuple, list)):
 
-    res["Customer"] = (
-        df[customer_col]
-        if customer_col is not None
-        else None
-    )
+                    if len(date_range) == 2:
 
-    res["Invoice_No"] = (
-        df[invoice_col]
-        if invoice_col is not None
-        else None
-    )
+                        start_d, end_d = date_range
 
-    # حذف الصفوف التي لا تحتوي على تاريخ صحيح
-    res = res.dropna(subset=["Parsed_Date"]).copy()
+                        if start_d and end_d:
 
-    # تنظيف أرقام العملاء
-    res["Customer"] = res["Customer"].astype("string").str.strip()
-    res["Invoice_No"] = res["Invoice_No"].astype("string").str.strip()
+                            dy_filtered = dy_filtered[
+                                (dy_filtered["Date_Only"].dt.date >= start_d)
+                                &
+                                (dy_filtered["Date_Only"].dt.date <= end_d)
+                            ]
 
-    valid_customer = (
-        res["Customer"].notna()
-        & ~res["Customer"].isin(["", "nan", "None"])
-    )
+            if not dy_filtered.empty:
 
-    valid_invoice = (
-        res["Invoice_No"].notna()
-        & ~res["Invoice_No"].isin(["", "nan", "None"])
-    )
+                # تجميع المبيعات حسب التاريخ
+                grouped_daily = (
+                    dy_filtered.groupby("Date_Only")
+                    .agg(
+                        Sales_Count=(
+                            "Invoice_No",
+                            lambda x: x.nunique()
+                        ),
+                        Total_I_Sum=(
+                            "Total_I",
+                            lambda x: x.sum(min_count=1)
+                        ),
+                        Customer_Count=(
+                            "Customer",
+                            "nunique"
+                        ),
+                        Total_Amount=(
+                            "Amount",
+                            lambda x: x.sum(min_count=1)
+                        )
+                    )
+                    .reset_index()
+                    .sort_values("Date_Only", ascending=False)
+                )
 
-    valid_amount = res["Amount"].fillna(0) != 0
-    valid_quantity = res["Total_I"].fillna(0) != 0
+                # عرض أسماء الأعمدة بالعربية
+                grouped_daily = grouped_daily.rename(
+                    columns={
+                        "Date_Only": "التاريخ",
+                        "Sales_Count": "عدد الفواتير",
+                        "Total_I_Sum": "إجمالي الكميات",
+                        "Customer_Count": "عدد العملاء",
+                        "Total_Amount": "مبيعات SAR"
+                    }
+                )
 
-    # الاحتفاظ بحركات البيع الفعلية فقط
-    res = res[
-        valid_customer
-        | valid_invoice
-        | valid_amount
-        | valid_quantity
-    ].copy()
+                # تنسيق الجدول
+                st.dataframe(
+                    grouped_daily.style.format(
+                        {
+                            "إجمالي الكميات": "{:,.2f}",
+                            "مبيعات SAR": "{:,.2f}"
+                        },
+                        na_rep="—"
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                    height=250
+                )
 
-    # إضافة التاريخ بدون الوقت
-    res["Date_Only"] = res["Parsed_Date"].dt.normalize()
+                # إجماليات الفترة المعروضة
+                st.markdown("**ملخص المبيعات اليومية**")
 
-    return res.reset_index(drop=True)
+                total_amount = dy_filtered["Amount"].sum()
+                total_qty = dy_filtered["Total_I"].sum()
+
+                invoice_count = dy_filtered[
+                    "Invoice_No"
+                ].nunique()
+
+                customer_count = dy_filtered[
+                    "Customer"
+                ].nunique()
+
+                m1, m2 = st.columns(2)
+
+                m1.metric(
+                    "إجمالي المبيعات",
+                    f"{total_amount:,.2f} SAR"
+                )
+
+                m2.metric(
+                    "إجمالي الكميات",
+                    f"{total_qty:,.2f}"
+                )
+
+                m3, m4 = st.columns(2)
+
+                m3.metric(
+                    "عدد الفواتير",
+                    f"{invoice_count:,}"
+                )
+
+                m4.metric(
+                    "عدد العملاء",
+                    f"{customer_count:,}"
+                )
+
+            else:
+
+                st.warning(
+                    "لا توجد مبيعات في التاريخ المحدد."
+                )
