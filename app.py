@@ -53,8 +53,7 @@ TEXT = {
         "select_half": "📆 اختر النصف",
         "select_quarter": "🗓️ اختر الربع",
         "select_month": "📅 اختر الشهر",
-        "daily_month": "🗓️ شهر المبيعات",
-        "search_day": "🔍 ابحث عن اليوم",
+        "daily_date": "📅 تاريخ المبيعات باليوم",
         "sales_count": "عدد العمليات",
         "total_i": "إجمالي (عمود I)",
         "customer_count": "عدد العملاء",
@@ -92,8 +91,7 @@ TEXT = {
         "select_half": "📆 Select half-year",
         "select_quarter": "🗓️ Select quarter",
         "select_month": "📅 Select month",
-        "daily_month": "🗓️ Sales Month",
-        "search_day": "🔍 Search Day",
+        "daily_date": "📅 Sales Date (Day)",
         "sales_count": "Transactions",
         "total_i": "Total (Col I)",
         "customer_count": "Customers",
@@ -387,7 +385,7 @@ def daily_data_from_sheet(sheets):
     if not name:
         return None
     df = sheets[name].copy()
-    if df.shape[1] < 10:  # التأكد من وجود أعمدة حتى العمود J (index 9) على الأقل
+    if df.shape[1] < 10:
         return None
     
     res = pd.DataFrame()
@@ -484,7 +482,7 @@ with quarter_col:
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# الصف الثاني: تحليل الشهر بجانب جدول تحليل المبيعات اليومية من شيت Data
+# الصف الثاني: تحليل الشهر بجانب جدول تحليل المبيعات اليومية من شيت Data (بتاريخ المبيعات باليوم مباشرة)
 month_col, daily_col = st.columns(2, gap="medium")
 
 with month_col:
@@ -495,26 +493,18 @@ with daily_col:
     st.markdown(f'<div class="panel-heading">📋 {t["daily"]}</div>', unsafe_allow_html=True)
     daily_df = daily_data_from_sheet(sheets)
     if daily_df is not None and not daily_df.empty:
-        # ربط البيانات تلقائياً بسنة الكشف المختارة
+        # فلترة البيانات بناءً على سنة الكشف المختارة في الأعلى تلقائياً
         dy_filtered = daily_df[daily_df.Parsed_Date.dt.year == year].copy()
-        dy_filtered["Month_Name"] = dy_filtered.Parsed_Date.dt.strftime("%b")
         
-        d1, d2 = st.columns(2)
-        with d1:
-            available_months = [m for m in MONTHS if m in dy_filtered.Month_Name.unique()]
-            dm = st.selectbox(t["daily_month"], [t["all"]] + available_months, key="daily_month_select")
-            
-        if dm != t["all"]:
-            dy_filtered = dy_filtered[dy_filtered.Month_Name == dm]
-            
         if not dy_filtered.empty:
             dy_filtered["Date_Only"] = dy_filtered.Parsed_Date.dt.date
             
+            # استخراج قائمة التواريخ المتاحة للبحث والاختيار المباشر
             all_dates = sorted(dy_filtered["Date_Only"].unique().tolist(), reverse=True)
             date_options = [t["all"]] + [str(d) for d in all_dates]
             
-            with d2:
-                selected_day = st.selectbox(t["search_day"], date_options, key="daily_search_day")
+            # خيار اختيار تاريخ المبيعات باليوم مباشرة
+            selected_day = st.selectbox(t["daily_date"], date_options, key="daily_date_select")
                 
             if selected_day != t["all"]:
                 dy_filtered = dy_filtered[dy_filtered["Date_Only"].astype(str) == selected_day]
