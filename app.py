@@ -221,19 +221,6 @@ div[data-testid="stMetricValue"] {{
     font-weight:750;
 }}
 
-.panel-heading {{
-    background:linear-gradient(100deg,{C['navy']},{C['navy2']});
-    color:white;
-    padding:9px 12px;
-    border-radius:10px;
-    margin:0 0 10px;
-    font-weight:750;
-    min-height:42px;
-    display:flex;
-    align-items:center;
-    gap:6px;
-}}
-
 .period-badge {{
     background:#e6fffa;
     border:1px solid #319795;
@@ -246,7 +233,6 @@ div[data-testid="stMetricValue"] {{
     display:inline-block;
 }}
 
-/* تنسيق القائمة المنسدلة بجانب العنوان */
 div[data-testid="stSelectbox"] > div > div {{
     min-height: 42px;
     border-radius: 10px;
@@ -545,13 +531,24 @@ def monthly_chart(month_df):
 
 
 # =========================================================
-# 8. RENDER ANALYSIS PANEL WITH INLINE SELECTOR
+# 8. RENDER UNIFIED CARD PANEL WITH SELECTOR
 # =========================================================
 
 def render_panel_with_selector(title, options, default_idx, year_df, filter_col, key, icon="📊"):
-    h_col, s_col = st.columns([2.6, 1], gap="small")
-    
-    with s_col:
+    # غلاف كارد موحد (خانة واحدة متكاملة)
+    st.markdown(f"""
+    <div style="background: white; border: 1px solid {C['border']}; border-radius: 12px; padding: 14px; margin-bottom: 15px; box-shadow: 0 2px 8px rgba(16,45,80,.05);">
+    """, unsafe_allow_html=True)
+
+    # صف العنوان وقائمة الاختيار مدمجان داخل نفس الإطار العلوي
+    c_title, c_select = st.columns([2.3, 1])
+    with c_title:
+        st.markdown(f"""
+        <div style="background: linear-gradient(100deg, {C['navy']}, {C['navy2']}); color: white; padding: 10px 14px; border-radius: 9px; font-weight: 750; display: flex; align-items: center; height: 42px; font-size: 0.95rem;">
+            {icon} {title}
+        </div>
+        """, unsafe_allow_html=True)
+    with c_select:
         selected_val = st.selectbox(
             title,
             options,
@@ -559,17 +556,12 @@ def render_panel_with_selector(title, options, default_idx, year_df, filter_col,
             key=key,
             label_visibility="collapsed"
         )
-        
-    with h_col:
-        st.markdown(
-            f'<div class="panel-heading">{icon} {title} ({selected_val})</div>',
-            unsafe_allow_html=True
-        )
 
     sub_data = year_df[year_df[filter_col] == selected_val]
 
     if sub_data.empty:
         st.info(t["no_data"])
+        st.markdown("</div>", unsafe_allow_html=True)
         return selected_val
 
     target = total(sub_data.Target)
@@ -577,12 +569,14 @@ def render_panel_with_selector(title, options, default_idx, year_df, filter_col,
     variance = actual - target if pd.notna(actual) and pd.notna(target) else np.nan
     rate = actual / target * 100 if pd.notna(actual) and pd.notna(target) and target > 0 else np.nan
 
+    st.markdown("<div style='margin-top: 12px;'></div>", unsafe_allow_html=True)
     a, b, c, d = st.columns(4)
     a.metric(t["variance"], num(variance))
     b.metric(t["achievement"], pct(rate))
     c.metric(t["actual"], num(actual))
     d.metric(t["target"], num(target))
 
+    st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
     bar_col, donuts_col = st.columns([1, 1.4], gap="small")
 
     with bar_col:
@@ -608,6 +602,7 @@ def render_panel_with_selector(title, options, default_idx, year_df, filter_col,
                         key=f"{key}_{product}"
                     )
 
+    st.markdown("</div>", unsafe_allow_html=True)
     return selected_val
 
 
@@ -843,7 +838,7 @@ st.markdown("<hr>", unsafe_allow_html=True)
 
 
 # =========================================================
-# 19. HALF-YEAR AND QUARTER ANALYSIS (INLINE SELECTORS)
+# 19. HALF-YEAR AND QUARTER ANALYSIS (UNIFIED CARDS)
 # =========================================================
 
 half_col, quarter_col = st.columns(2, gap="medium")
@@ -891,7 +886,7 @@ with month_col:
     )
 
 with daily_col:
-    st.markdown(f'<div class="panel-heading">📋 {t["daily"]}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="section-heading" style="margin-bottom: 12px; height: 42px; display: flex; align-items: center;">📋 {t["daily"]}</div>', unsafe_allow_html=True)
     daily_df, daily_error = daily_data_from_sheet(sheets)
 
     if daily_error:
