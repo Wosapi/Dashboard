@@ -120,15 +120,13 @@ def parse_target_sheet(raw_df):
     if "Actual" not in pivoted.columns: pivoted["Actual"] = np.nan
     return pivoted.sort_values(["Year", "Month_Num", "Product"])
 
-# --- 3. محرك استخراج وتحليل المبيعات اليومية من باقي الشيتات ---
+# --- 3. محرك استخراج وتحليل المبيعات اليومية ---
 def detect_daily_sales_data(sheets_dict):
-    """البحث في شيتات الملف عن جداول تحتوي على تواريخ ومبيعات يومية وتنظيفها"""
     candidate_sheets = {}
     for sheet_name, df in sheets_dict.items():
         if sheet_name == "Target" or df is None or df.empty:
             continue
         
-        # البحث عن صف العناوين الحقيقي إذا كانت الصفوف الأولى فارغة أو عناوين عامة
         clean_sheet = df.copy()
         for idx in range(min(10, len(clean_sheet))):
             row_vals = [str(v).lower() for v in clean_sheet.iloc[idx].values if pd.notna(v)]
@@ -137,16 +135,13 @@ def detect_daily_sales_data(sheets_dict):
                 clean_sheet = clean_sheet.iloc[idx + 1:].reset_index(drop=True)
                 break
 
-        # تنظيف أسماء الأعمدة المكررة أو الفارغة
         clean_sheet = clean_sheet.loc[:, clean_sheet.columns.notna()]
         clean_sheet.columns = [str(c).strip() for c in clean_sheet.columns]
         
-        # البحث عن عمود التاريخ
         date_col = None
         for col in clean_sheet.columns:
             col_l = col.lower()
             if any(k in col_l for k in ["date", "تاريخ", "day", "يوم"]):
-                # محاولة تحويل العمود لتاريخ (مع دعم أرقام تواريخ إكسل التسلسلية)
                 s = clean_sheet[col]
                 if pd.api.types.is_numeric_dtype(s):
                     parsed = pd.to_datetime(s, unit='D', origin='1899-12-30', errors='coerce')
@@ -166,212 +161,4 @@ def detect_daily_sales_data(sheets_dict):
                 
     return candidate_sheets
 
-# --- 4. المعادلات ---
-def enrich_metrics(df):
-    if df is None or df.empty: return df
-    res = df.copy()
-    res["Variance"] = res["Actual"] - res["Target"]
-    res["Remaining"] = res["Target"] - res["Actual"]
-    res["Achievement %"] = np.where((res["Target"].notna()) & (res["Target"] > 0) & (res["Actual"].notna()), (res["Actual"] / res["Target"]) * 100, np.nan)
-    return res
-
-def summarize_by_period(df, group_cols):
-    summary = df.groupby(group_cols, as_index=False, sort=False).agg(
-        Target=("Target", "sum"), Actual=("Actual", lambda x: x.sum(min_count=1))
-    )
-    return enrich_metrics(summary)
-
-# --- 5. الرسوم البيانية ---
-def plot_monthly_target_vs_actual(monthly_df):
-    fig = go.Figure()
-    fig.add_trace(go.Bar(x=monthly_df["Month"], y=monthly_df["Target"], name="المستهدف (Target)", marker_color=COLORS["navy_blue"]))
-    fig.add_trace(go.Bar(x=monthly_df["Month"], y=monthly_df["Actual"], name="الفعلي (Actual)", marker_color=COLORS["teal"]))
-    fig.update_layout(barmode="group", plot_bgcolor=COLORS["white"], paper_bgcolor=COLORS["white"], font_color=COLORS["text"], margin=dict(l=20, r=20, t=40, b=20), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-    return fig
-
-def plot_monthly_growth_line(monthly_df):
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=monthly_df["Month"], y=monthly_df["Target"], mode="lines+markers", name="مسار المستهدف", line=dict(color=COLORS["orange"], width=2, dash="dash")))
-    fig.add_trace(go.Scatter(x=monthly_df["Month"], y=monthly_df["Actual"], mode="lines+markers", name="المبيعات الفعلية", line=dict(color=COLORS["dark_blue"], width=3), marker=dict(size=8)))
-    fig.update_layout(plot_bgcolor=COLORS["white"], paper_bgcolor=COLORS["white"], font_color=COLORS["text"], margin=dict(l=20, r=20, t=40, b=20), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-    return fig
-
-def plot_single_month_products(month_prod_df, month_name):
-    fig = go.Figure()
-    fig.add_trace(go.Bar(x=month_prod_df["Product"], y=month_prod_df["Target"], name="المستهدف", marker_color=COLORS["navy_blue"], text=month_prod_df["Target"].round(2), textposition="auto"))
-    fig.add_trace(go.Bar(x=month_prod_df["Product"], y=month_prod_df["Actual"], name="الفعلي", marker_color=COLORS["green"], text=month_prod_df["Actual"].round(2), textposition="auto"))
-    fig.update_layout(title=f"مقارنة المنتجات لشهر {month_name}", barmode="group", plot_bgcolor=COLORS["white"], paper_bgcolor=COLORS["white"], font_color=COLORS["text"], margin=dict(l=20, r=20, t=50, b=20), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-    return fig
-
-def plot_quarterly_comparison(quarterly_df):
-    fig = go.Figure()
-    fig.add_trace(go.Bar(x=quarterly_df["Quarter"], y=quarterly_df["Target"], name="مستهدف الربع", marker_color="#1E3A5F"))
-    fig.add_trace(go.Bar(x=quarterly_df["Quarter"], y=quarterly_df["Actual"], name="فعلي الربع", marker_color="#16A36A"))
-    fig.update_layout(barmode="group", plot_bgcolor=COLORS["white"], paper_bgcolor=COLORS["white"], font_color=COLORS["text"], margin=dict(l=20, r=20, t=30, b=20), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-    return fig
-
-def create_donut_chart(percentage, color):
-    display_val = min(max(percentage, 0), 100) if (percentage is not None and not pd.isna(percentage)) else 0
-    label_text = f"{percentage:.1f}%" if (percentage is not None and not pd.isna(percentage)) else "N/A"
-    fig = go.Figure(data=[go.Pie(values=[display_val, 100 - display_val], hole=0.75, marker_colors=[color, "#E2E8F0"], textinfo="none", hoverinfo="none", sort=False)])
-    fig.update_layout(showlegend=False, annotations=[dict(text=label_text, x=0.5, y=0.5, font_size=19, font_weight="bold", font_color=COLORS["text"], showarrow=False)], plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", margin=dict(l=5, r=5, t=5, b=5), height=150)
-    return fig
-
-def convert_dfs_to_excel(sheets_dict):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        for s_name, df in sheets_dict.items():
-            df.to_excel(writer, sheet_name=s_name[:31], index=False)
-    return output.getvalue()
-
-# --- القائمة الجانبية ---
-st.sidebar.header("📂 مصدر البيانات")
-uploaded_file = st.sidebar.file_uploader("ارفع ملف Excel (.xlsx أو .xlsb)", type=["xlsx", "xls", "xlsb"])
-
-sheets_dict = load_all_sheets(uploaded_file)
-
-if sheets_dict is not None:
-    if "Target" not in sheets_dict:
-        st.error("شيت 'Target' غير موجود في الملف.")
-    else:
-        clean_df = parse_target_sheet(sheets_dict["Target"])
-        if clean_df is None or clean_df.empty:
-            st.error("تعذر التعرف على هيكل شيت Target.")
-        else:
-            available_years = sorted(clean_df["Year"].unique().tolist())
-            st.sidebar.header("🎛️ الفلاتر التفاعلية")
-            selected_year = st.sidebar.selectbox("اختر السنة", available_years, index=len(available_years)-1)
-            selected_products = st.sidebar.multiselect("فئات المنتجات", PRODUCTS, default=PRODUCTS)
-            selected_quarters = st.sidebar.multiselect("الأرباع السنوية", ["Q1", "Q2", "Q3", "Q4"], default=["Q1", "Q2", "Q3", "Q4"])
-
-            filtered_df = clean_df[(clean_df["Year"] == selected_year) & (clean_df["Product"].isin(selected_products)) & (clean_df["Quarter"].isin(selected_quarters))].copy()
-
-            # --- 1. KPIs ---
-            total_target = filtered_df["Target"].sum()
-            total_actual = filtered_df["Actual"].sum(min_count=1)
-            ach_pct = (total_actual / total_target * 100) if (pd.notna(total_actual) and total_target > 0) else np.nan
-            remaining = (total_target - total_actual) if pd.notna(total_actual) else total_target
-
-            m_summary = summarize_by_period(filtered_df, ["Month_Num", "Month"]).sort_values("Month_Num")
-            valid_m = m_summary.dropna(subset=["Actual"])
-            best_month = valid_m.loc[valid_m["Actual"].idxmax(), "Month"] if not valid_m.empty else "لا يوجد"
-
-            p_summary = summarize_by_period(filtered_df, ["Product"])
-            valid_p = p_summary.dropna(subset=["Actual"])
-            best_prod = valid_p.loc[valid_p["Actual"].idxmax(), "Product"] if not valid_p.empty else "لا يوجد"
-
-            k1, k2, k3, k4, k5, k6 = st.columns(6)
-            k1.metric("إجمالي المستهدف", f"{total_target:,.2f}")
-            k2.metric("إجمالي الفعلي", f"{total_actual:,.2f}" if pd.notna(total_actual) else "غير مسجل")
-            k3.metric("نسبة التحقيق", f"{ach_pct:.1f}%" if pd.notna(ach_pct) else "—")
-            k4.metric("المتبقي", f"{remaining:,.2f}")
-            k5.metric("أفضل شهر", best_month)
-            k6.metric("أفضل منتج", best_prod)
-
-            st.markdown("---")
-
-            # --- 2. الأداء الشهري العام ---
-            st.subheader(f"📈 نظرة عامة على الأداء الشهري لعام {selected_year}")
-            c1, c2 = st.columns([3, 2])
-            with c1: st.plotly_chart(plot_monthly_target_vs_actual(m_summary), use_container_width=True)
-            with c2: st.plotly_chart(plot_monthly_growth_line(m_summary), use_container_width=True)
-
-            # --- 3. دوائر الإنجاز ---
-            st.subheader("🎯 نسب تحقيق المستهدف حسب فئة المنتج")
-            year_prod_df = summarize_by_period(clean_df[(clean_df["Year"] == selected_year) & (clean_df["Quarter"].isin(selected_quarters))], ["Product"])
-            prod_colors = {"Min": COLORS["dark_blue"], "Syn": COLORS["orange"], "DEO": COLORS["teal"], "Fluids": COLORS["navy_blue"]}
-            d_cols = st.columns(4)
-            for idx, prod in enumerate(PRODUCTS):
-                row = year_prod_df[year_prod_df["Product"] == prod]
-                pct = row["Achievement %"].values[0] if not row.empty else np.nan
-                t_val = row["Target"].values[0] if not row.empty else 0
-                a_val = row["Actual"].values[0] if not row.empty else np.nan
-                with d_cols[idx]:
-                    st.markdown(f"<div style='background-color: white; padding: 12px; border-radius: 12px; text-align: center;'>", unsafe_allow_html=True)
-                    st.plotly_chart(create_donut_chart(pct, prod_colors[prod]), use_container_width=True)
-                    a_str = f"{a_val:,.2f}" if pd.notna(a_val) else "0.00"
-                    st.markdown(f"**فئة {prod}**<br><span style='font-size:12px; color:#555;'>الفعلي: {a_str} / المستهدف: {t_val:,.2f}</span></div>", unsafe_allow_html=True)
-
-            st.markdown("---")
-
-            # --- 4. قسم جديد: تفاصيل المبيعات الشهرية (كل شهر لوحده) ---
-            st.subheader(f"🔍 تحليل الشهر الفردي المفصل (كل شهر لوحده) - {selected_year}")
-            selected_single_month = st.selectbox("اختر الشهر لعرض تفاصيله الكاملة:", VALID_MONTHS, index=0)
-            
-            single_month_df = clean_df[
-                (clean_df["Year"] == selected_year) & 
-                (clean_df["Month"] == selected_single_month) &
-                (clean_df["Product"].isin(selected_products))
-            ].copy()
-            single_month_enriched = enrich_metrics(single_month_df)
-
-            sm_target = single_month_enriched["Target"].sum()
-            sm_actual = single_month_enriched["Actual"].sum(min_count=1)
-            sm_ach = (sm_actual / sm_target * 100) if (pd.notna(sm_actual) and sm_target > 0) else np.nan
-            sm_var = (sm_actual - sm_target) if pd.notna(sm_actual) else np.nan
-
-            sm1, sm2, sm3, sm4 = st.columns(4)
-            sm1.metric(f"مستهدف شهر {selected_single_month}", f"{sm_target:,.2f}")
-            sm2.metric(f"فعلي شهر {selected_single_month}", f"{sm_actual:,.2f}" if pd.notna(sm_actual) else "غير مسجل")
-            sm3.metric("نسبة تحقيق الشهر", f"{sm_ach:.1f}%" if pd.notna(sm_ach) else "—")
-            sm4.metric("الفارق (Variance)", f"{sm_var:+,.2f}" if pd.notna(sm_var) else "—")
-
-            sc1, sc2 = st.columns([3, 2])
-            with sc1:
-                st.plotly_chart(plot_single_month_products(single_month_enriched, selected_single_month), use_container_width=True)
-            with sc2:
-                st.markdown(f"**جدول تفصيل منتجات شهر {selected_single_month}:**")
-                st.dataframe(
-                    single_month_enriched[["Product", "Target", "Actual", "Variance", "Remaining", "Achievement %"]].style.format(
-                        {"Target": "{:,.2f}", "Actual": "{:,.2f}", "Variance": "{:+,.2f}", "Remaining": "{:,.2f}", "Achievement %": "{:.1f}%"},
-                        na_rep="—"
-                    ),
-                    use_container_width=True
-                )
-
-            st.markdown("---")
-
-            # --- 5. قسم جديد: تفاصيل المبيعات اليومية (من شيتات الملف) ---
-            st.subheader("📅 تحليل المبيعات اليومية (Daily Sales Breakdown)")
-            daily_sheets = detect_daily_sales_data(sheets_dict)
-
-            if not daily_sheets:
-                st.info("لم يتم العثور على شيت يحتوي على تواريخ يومية داخل الملف المرفوع. الشيتات المتوفرة في الملف هي: " + "، ".join(sheets_dict.keys()))
-            else:
-                chosen_daily_sheet = st.selectbox("اختر شيت البيانات اليومية:", list(daily_sheets.keys()))
-                daily_df, date_col_name = daily_sheets[chosen_daily_sheet]
-
-                # فلترة المبيعات اليومية حسب السنة المختارة والشهر الفردي (اختياري)
-                daily_years = sorted(daily_df["Parsed_Date"].dt.year.unique().tolist())
-                d_col_f1, d_col_f2, d_col_f3 = st.columns(3)
-                with d_col_f1:
-                    d_year = st.selectbox("سنة المبيعات اليومية:", daily_years, index=len(daily_years)-1)
-                
-                daily_year_df = daily_df[daily_df["Parsed_Date"].dt.year == d_year].copy()
-                daily_year_df["Month_Name"] = daily_year_df["Parsed_Date"].dt.strftime("%b")
-                
-                with d_col_f2:
-                    avail_d_months = ["الكل"] + [m for m in VALID_MONTHS if m in daily_year_df["Month_Name"].unique()]
-                    d_month = st.selectbox("تصفية بشهر معين (يومي):", avail_d_months)
-                
-                # تحديد الأعمدة الرقمية (الكمية أو المبيعات)
-                numeric_cols = [c for c in daily_year_df.select_dtypes(include=[np.number]).columns if c not in ["Year", "Month"]]
-                with d_col_f3:
-                    val_col = st.selectbox("اختر عمود القيمة / الكمية:", numeric_cols) if numeric_cols else None
-
-                if d_month != "الكل":
-                    daily_year_df = daily_year_df[daily_year_df["Month_Name"] == d_month]
-
-                if val_col and not daily_year_df.empty:
-                    daily_year_df["Date_Only"] = daily_year_df["Parsed_Date"].dt.date
-                    daily_grouped = daily_year_df.groupby("Date_Only", as_index=False)[val_col].sum().sort_values("Date_Only")
-
-                    total_d_sales = daily_grouped[val_col].sum()
-                    avg_d_sales = daily_grouped[val_col].mean()
-                    max_d_row = daily_grouped.loc[daily_grouped[val_col].idxmax()]
-                    active_days = len(daily_grouped[daily_grouped[val_col] > 0])
-
-                    dk1, dk2, dk3, dk4 = st.columns(4)
-                    dk1.metric("إجمالي المبيعات للفترة", f"{total_d_sales:,.2f}")
-                    dk2.metric("متوسط البيع اليومي", f"{avg_d_sales:,.2f}")
-                    
+# --- 
