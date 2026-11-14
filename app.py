@@ -157,9 +157,6 @@ TEXT = {
 # =========================================================
 # 2. CSS DESIGN
 # =========================================================
-# ملاحظة مهمة: تنسيق شريط العنوان الأزرق أصبح يعتمد على
-# st.container(key="hdr_...") بدل :has() حتى لا يتلوّن البانل كاملاً.
-# يتطلب Streamlit >= 1.39
 
 st.markdown(f"""
 <style>
@@ -376,70 +373,39 @@ div[data-testid="stPlotlyChart"] .main-svg {{
     background:var(--c);
 }}
 
-/* ---------- دوائر الإنجاز (شبكة 2×2 بنفس ارتفاع عمود الرسم) ---------- */
+/* ---------- دوائر الإنجاز (شبكة SVG ثابتة لا تتبعثر) ---------- */
 .dn-grid {{
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    grid-template-rows:1fr 1fr;
-    gap:6px 8px;
-    height:232px;
-    align-items:center;
-    justify-items:center;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    align-items: center;
+    justify-items: center;
+    padding: 4px 0;
+    height: 232px;
 }}
 
 .dn {{
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    gap:5px;
-    width:100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    text-align: center;
 }}
 
-.dn-ring {{
-    position:relative;
-    width:min(84px, 82%);
-    aspect-ratio:1 / 1;
-    border-radius:50%;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-}}
-
-.dn-ring::before {{
-    content:"";
-    position:absolute;
-    inset:10px;
-    border-radius:50%;
-    background:{C['white']};
-    box-shadow:inset 0 0 0 1px {C['border']};
-}}
-
-.dn-center {{
-    position:relative;
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    line-height:1.2;
-    direction:ltr;
-}}
-
-.dn-center b {{
-    font-size:.62rem;
-    color:{C['muted']};
-    font-weight:700;
-}}
-
-.dn-center span {{
-    font-size:.78rem;
-    font-weight:800;
+.dn svg {{
+    display: block;
+    width: 86px;
+    height: 86px;
 }}
 
 .dn-sub {{
-    font-size:.64rem;
-    font-weight:700;
-    color:{C['muted']};
-    direction:ltr;
-    white-space:nowrap;
+    font-size: .66rem;
+    font-weight: 700;
+    color: {C['muted']};
+    direction: ltr;
+    white-space: nowrap;
+    margin-top: 2px;
 }}
 
 /* ---------- Dataframe / tabs / radio ---------- */
@@ -695,77 +661,35 @@ def style_table(df):
 # 7. CHARTS
 # =========================================================
 
-def donut(actual, target, product, compact=False):
-    valid = pd.notna(actual) and pd.notna(target) and target > 0
-    rate = actual / target * 100 if valid else 0
-    ring = 100 if rate >= 100 else (rate if rate > 0 else 0.001)
-    remainder = max(100 - ring, 0.001) if rate < 100 else 0.001
-    label = f"{rate:.1f}%" if valid else "N/A"
-    label_color = status_color(rate) if valid else C["muted"]
-
-    y_domain = [0.22, 0.98] if compact else [0.20, 0.98]
-    chart_height = 112 if compact else 128
-    center_y = 0.60 if compact else 0.59
-    title_size = 9.5 if compact else 10.5
-    pct_size = 11.5 if compact else 13.5
-    sub_size = 8.5 if compact else 9.5
-
-    fig = go.Figure(
-        go.Pie(
-            values=[ring, remainder],
-            hole=0.73,
-            sort=False,
-            direction="clockwise",
-            rotation=0,
-            domain=dict(x=[0.16, 0.84], y=y_domain),
-            marker=dict(colors=[PCOLORS[product], C["gray"]], line=dict(color="white", width=1.2)),
-            textinfo="none",
-            hovertemplate=f"{product}<br>{label}<extra></extra>"
-        )
-    )
-
-    fig.add_annotation(
-        x=0.5, y=center_y, xref="paper", yref="paper",
-        text=(
-            f"<b>{product}</b><br>"
-            f"<span style='font-size:{pct_size}px;font-weight:800;color:{label_color}'>{label}</span>"
-        ),
-        showarrow=False, align="center",
-        font=dict(size=title_size, color=C["text"])
-    )
-
-    fig.add_annotation(
-        x=0.5, y=0.02, xref="paper", yref="paper",
-        text=f"<b>{num(actual)} / {num(target)}</b>",
-        showarrow=False, align="center",
-        font=dict(size=sub_size, color=C["muted"])
-    )
-
-    fig.update_layout(
-        height=chart_height,
-        showlegend=False,
-        margin=dict(l=8, r=8, t=4, b=2),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)"
-    )
-
-    return fig
-
-
 def donut_html(actual, target, product):
-    """دائرة إنجاز كاملة بـ CSS (تتكيف مع عرض العمود ولا تُقص أبداً)."""
+    """دائرة إنجاز SVG ثابتة التموضع لا تتبعثر عند تحويل الصفحة إلى صورة."""
     valid = pd.notna(actual) and pd.notna(target) and target > 0
     rate = actual / target * 100 if valid else 0.0
-    deg = max(0.0, min(rate, 100.0)) * 3.6
+    clamped = max(0.0, min(rate, 100.0))
     label = f"{rate:.1f}%" if valid else "N/A"
     label_color = status_color(rate) if valid else C["muted"]
     ring_color = PCOLORS[product]
-    ring_bg = f"conic-gradient({ring_color} 0deg {deg:.1f}deg, {C['gray']} {deg:.1f}deg 360deg)"
+
+    r = 35
+    circ = 2 * np.pi * r
+    dash = circ * (clamped / 100.0)
+
+    svg = (
+        f'<svg viewBox="0 0 88 88" width="86" height="86" xmlns="http://www.w3.org/2000/svg">'
+        f'<circle cx="44" cy="44" r="{r}" fill="none" stroke="{C["gray"]}" stroke-width="9"/>'
+        f'<circle cx="44" cy="44" r="{r}" fill="none" stroke="{ring_color}" stroke-width="9" '
+        f'stroke-dasharray="{dash:.2f} {circ:.2f}" stroke-linecap="round" '
+        f'transform="rotate(-90 44 44)"/>'
+        f'<text x="44" y="39" text-anchor="middle" font-family="Tahoma, Arial, sans-serif" '
+        f'font-size="11" font-weight="700" fill="{C["muted"]}">{product}</text>'
+        f'<text x="44" y="54" text-anchor="middle" font-family="Tahoma, Arial, sans-serif" '
+        f'font-size="13" font-weight="800" fill="{label_color}">{label}</text>'
+        f'</svg>'
+    )
+
     return (
         f'<div class="dn" title="{product}: {label}">'
-        f'<div class="dn-ring" style="background:{ring_bg}">'
-        f'<div class="dn-center"><b>{product}</b>'
-        f'<span style="color:{label_color}">{label}</span></div></div>'
+        f'{svg}'
         f'<div class="dn-sub">{num(actual)} / {num(target)}</div>'
         f'</div>'
     )
@@ -1119,8 +1043,6 @@ st.markdown(f"""
 # =========================================================
 # 15b. DOWNLOAD DASHBOARD AS IMAGE (PNG)
 # =========================================================
-# يلتقط اللوحة كاملة من المتصفح (client-side) ويحملها كصورة PNG
-# بحالتها الحالية (الشهر/الربع/النصف المختار).
 
 IMAGE_EXPORT_HTML = """
 <style>
@@ -1174,13 +1096,19 @@ IMAGE_EXPORT_HTML = """
       if (!node) { throw new Error("node"); }
       if (holder) { holder.style.display = "none"; }
       await sleep(300);
-      var w = node.scrollWidth, h = node.scrollHeight;
+      var w = Math.max(node.scrollWidth, 1200);
+      var h = node.scrollHeight;
       var opts = {
         backgroundColor: "#F1F5F9",
         pixelRatio: Math.min(2, 12000 / h),
         cacheBust: true,
         width: w,
         height: h,
+        style: {
+          width: w + "px",
+          maxWidth: w + "px",
+          transform: "none"
+        },
         filter: function (n) { return !(n.tagName === "IFRAME"); }
       };
       var blob;
@@ -1270,7 +1198,7 @@ st.markdown(f'<div class="section-heading">📈 {t["monthly"]} {year}</div>', un
 st.plotly_chart(
     monthly_chart(month_summary, [m for m in month_summary.Month if m in HOLIDAY_MONTHS]),
     use_container_width=True,
-    config={"displayModeBar": False, "staticPlot": True}  # رسم ثابت وغير تفاعلي
+    config={"displayModeBar": False, "staticPlot": True}
 )
 st.markdown(
     f'<div class="pct-legend">'
@@ -1348,7 +1276,6 @@ with daily_col:
             if year_daily.empty:
                 st.info(f"لا توجد مبيعات مسجلة في عام {year}.")
             else:
-                # حدود السنة كاملة (لحرية اختيار أي تاريخ) + حدود الشهر المختار (كقيمة افتراضية)
                 year_min = year_daily["Date_Only"].min()
                 year_max = year_daily["Date_Only"].max()
                 if dy_filtered.empty:
@@ -1357,7 +1284,6 @@ with daily_col:
                     min_d = dy_filtered["Date_Only"].min()
                     max_d = dy_filtered["Date_Only"].max()
 
-                # شهر بلا مبيعات قبل آخر شهر فيه مبيعات = إجازة
                 is_holiday = (month in HOLIDAY_MONTHS) or (
                     selected_month_number < int(year_daily["Month_Num"].max())
                 )
@@ -1372,7 +1298,6 @@ with daily_col:
                 daily_view = dy_filtered.copy()
 
                 if filter_mode == "تاريخ محدد":
-                    # أي يوم ضمن بيانات السنة (وليس الشهر المختار فقط)
                     selected_date = st.date_input(
                         "اختر اليوم المطلوب:",
                         value=max_d,
