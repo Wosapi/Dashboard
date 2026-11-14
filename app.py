@@ -262,9 +262,9 @@ if sheets_dict is not None:
 
             # --- 2. الأداء الشهري العام ---
             st.subheader(f"📈 نظرة عامة على الأداء الشهري لعام {selected_year}")
-            st.plotly_chart(plot_monthly_target_vs_actual(m_summary), use_container_width=True)
+            st.plotly_chart(plot_monthly_target_vs_actual(m_summary), use_container_width=True, config={'displayModeBar': False})
 
-            # --- 3. دوائر الإنجاز (العامة) ---
+            # --- 3. دوائر الإنجاز ---
             st.subheader("🎯 نسب تحقيق المستهدف حسب فئة المنتج")
             year_prod_df = summarize_by_period(clean_df[(clean_df["Year"] == selected_year) & (clean_df["Quarter"].isin(selected_quarters))], ["Product"])
             prod_colors = {"Min": COLORS["dark_blue"], "Syn": COLORS["orange"], "DEO": COLORS["teal"], "Fluids": COLORS["navy_blue"]}
@@ -276,7 +276,7 @@ if sheets_dict is not None:
                 a_val = row["Actual"].values[0] if not row.empty else np.nan
                 with d_cols[idx]:
                     st.markdown(f"<div style='background-color: white; padding: 12px; border-radius: 12px; text-align: center;'>", unsafe_allow_html=True)
-                    st.plotly_chart(create_donut_chart(pct, prod_colors[prod]), use_container_width=True)
+                    st.plotly_chart(create_donut_chart(pct, prod_colors[prod]), use_container_width=True, config={'displayModeBar': False})
                     a_str = f"{a_val:,.2f}" if pd.notna(a_val) else "0.00"
                     st.markdown(f"**فئة {prod}**<br><span style='font-size:12px; color:#555;'>الفعلي: {a_str} / المستهدف: {t_val:,.2f}</span></div>", unsafe_allow_html=True)
 
@@ -304,7 +304,7 @@ if sheets_dict is not None:
             sm3.metric("نسبة تحقيق الشهر", f"{sm_ach:.1f}%" if pd.notna(sm_ach) else "—")
             sm4.metric("الفارق (Variance)", f"{sm_var:+,.2f}" if pd.notna(sm_var) else "—")
 
-            # عرض المنتجات كبطاقات دائرية احترافية لشهر المحدد
+            # عرض المنتجات كبطاقات دائرية احترافية للشهر المحدد مع إخفاء شريط الأدوات
             st.markdown(f"**نسب تحقيق المنتجات لشهر {selected_single_month}:**")
             m_d_cols = st.columns(len(PRODUCTS))
             for idx, prod in enumerate(PRODUCTS):
@@ -315,7 +315,7 @@ if sheets_dict is not None:
                 
                 with m_d_cols[idx]:
                     st.markdown(f"<div style='background-color: white; padding: 12px; border-radius: 12px; text-align: center;'>", unsafe_allow_html=True)
-                    st.plotly_chart(create_donut_chart(p_pct, prod_colors[prod]), use_container_width=True)
+                    st.plotly_chart(create_donut_chart(p_pct, prod_colors[prod]), use_container_width=True, config={'displayModeBar': False})
                     p_a_str = f"{p_a:,.2f}" if pd.notna(p_a) else "0.00"
                     st.markdown(f"**{prod}**<br><span style='font-size:11px; color:#555;'>الفعلي: {p_a_str} <br> المستهدف: {p_t:,.2f}</span></div>", unsafe_allow_html=True)
 
@@ -371,7 +371,7 @@ if sheets_dict is not None:
                         color_discrete_sequence=[COLORS["teal"]]
                     )
                     fig_daily.update_layout(plot_bgcolor=COLORS["white"], paper_bgcolor=COLORS["white"], xaxis_title="التاريخ", yaxis_title=val_col)
-                    st.plotly_chart(fig_daily, use_container_width=True)
+                    st.plotly_chart(fig_daily, use_container_width=True, config={'displayModeBar': False})
 
                     with st.expander("عرض سجل الحركات اليومية التفصيلي"):
                         st.dataframe(daily_year_df.drop(columns=["Parsed_Date", "Date_Only"], errors="ignore"), use_container_width=True)
@@ -385,7 +385,7 @@ if sheets_dict is not None:
             q_summary = summarize_by_period(filtered_df, ["Quarter"])
             h_summary = summarize_by_period(filtered_df, ["Half"])
             qc1, qc2 = st.columns([3, 2])
-            with qc1: st.plotly_chart(plot_quarterly_comparison(q_summary), use_container_width=True)
+            with qc1: st.plotly_chart(plot_quarterly_comparison(q_summary), use_container_width=True, config={'displayModeBar': False})
             with qc2:
                 st.dataframe(q_summary.style.format({"Target": "{:,.2f}", "Actual": "{:,.2f}", "Achievement %": "{:.1f}%"}, na_rep="—"), use_container_width=True)
                 st.dataframe(h_summary.style.format({"Target": "{:,.2f}", "Actual": "{:,.2f}", "Achievement %": "{:.1f}%"}, na_rep="—"), use_container_width=True)
