@@ -1,14 +1,14 @@
 # إعدادات الألوان والثوابت العامة للنظام
 COLORS = {
-    "navy_blue": "#142B4A",
-    "dark_blue": "#1E3A5F",
-    "teal": "#00A6A6",
-    "green": "#16A36A",
+    "navy_blue": "#0B2545",
+    "dark_blue": "#13315C",
+    "teal": "#0E9F8E",
+    "green": "#16A34A",
     "orange": "#F59E0B",
-    "red": "#DC3545",
-    "background": "#F4F7FB",
+    "red": "#DC2626",
+    "background": "#F1F5F9",
     "white": "#FFFFFF",
-    "text": "#263445"
+    "text": "#0F2540",
 }
 
 PRODUCTS = ["Min", "Syn", "DEO", "Fluids"]
