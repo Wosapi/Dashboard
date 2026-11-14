@@ -221,6 +221,45 @@ div[data-testid="stMetricValue"] {{
     font-weight:750;
 }}
 
+/* شريط العنوان المدمج الذي يجمع النص والقائمة المنسدلة في خانة واحدة */
+div[data-testid="stHorizontalBlock"]:has(.integrated-header-title) {{
+    background: linear-gradient(100deg, {C['navy']}, {C['navy2']});
+    border-radius: 10px;
+    padding: 5px 10px;
+    align-items: center;
+    margin-bottom: 10px;
+    gap: 0.4rem !important;
+}}
+
+.integrated-header-title {{
+    color: white;
+    font-weight: 750;
+    font-size: 0.96rem;
+    padding: 4px 6px;
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}}
+
+/* تنسيق القائمة المنسدلة لتندمج بنعومة داخل الشريط الكحلي */
+div[data-testid="stHorizontalBlock"]:has(.integrated-header-title) div[data-testid="stSelectbox"] {{
+    margin: 0 !important;
+}}
+
+div[data-testid="stHorizontalBlock"]:has(.integrated-header-title) div[data-testid="stSelectbox"] > div > div {{
+    min-height: 34px !important;
+    height: 34px !important;
+    border-radius: 8px !important;
+    border: 1px solid rgba(255, 255, 255, 0.35) !important;
+    background-color: rgba(255, 255, 255, 0.96) !important;
+    font-weight: 800 !important;
+    color: {C['navy']} !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+}}
+
 .period-badge {{
     background:#e6fffa;
     border:1px solid #319795;
@@ -231,16 +270,6 @@ div[data-testid="stMetricValue"] {{
     font-size:0.85rem;
     margin-bottom:10px;
     display:inline-block;
-}}
-
-/* تنسيق القائمة المنسدلة داخل الحاوية الموحدة */
-div[data-testid="stSelectbox"] > div > div {{
-    min-height: 42px;
-    border-radius: 10px;
-    border: 1.5px solid {C['navy2']};
-    background-color: white;
-    font-weight: 700;
-    color: {C['navy']};
 }}
 
 hr {{
@@ -532,26 +561,22 @@ def monthly_chart(month_df):
 
 
 # =========================================================
-# 8. RENDER PANEL INSIDE A SINGLE UNIFIED CARD
+# 8. RENDER PANEL WITH INTEGRATED HEADER SELECTOR
 # =========================================================
 
 def render_panel_with_selector(title, options, default_idx, year_df, filter_col, key, icon="📊"):
-    # حاوية رئيسية موحدة لتمثيل خانة واحدة متكاملة
-    with st.container():
-        st.markdown(f"""
-        <div style="background: white; border: 1px solid {C['border']}; border-radius: 12px; padding: 12px; box-shadow: 0 2px 8px rgba(16,45,80,.05); margin-bottom: 15px;">
-        """, unsafe_allow_html=True)
+    with st.container(border=True):
+        current_val = st.session_state.get(key, options[default_idx])
 
-        h_col, s_col = st.columns([2.3, 1], gap="small")
-        
+        # صف العنوان المدمج (النص + القائمة المنسدلة داخل نفس الخانة الكحلية)
+        h_col, s_col = st.columns([2.6, 1], gap="small")
+
         with h_col:
-            # مؤشر مؤقت لقراءة القيمة الحالية من الـ session_state أو الافتراضية
-            current_val = st.session_state.get(key, options[default_idx])
             st.markdown(
-                f'<div style="background:linear-gradient(100deg,{C["navy"]},{C["navy2"]}); color:white; padding:10px 14px; border-radius:8px; font-weight:750; height:42px; display:flex; align-items:center;">{icon} {title} ({current_val})</div>',
+                f'<div class="integrated-header-title">{icon} {title}</div>',
                 unsafe_allow_html=True
             )
-            
+
         with s_col:
             selected_val = st.selectbox(
                 title,
@@ -565,7 +590,6 @@ def render_panel_with_selector(title, options, default_idx, year_df, filter_col,
 
         if sub_data.empty:
             st.info(t["no_data"])
-            st.markdown("</div>", unsafe_allow_html=True)
             return selected_val
 
         target = total(sub_data.Target)
@@ -573,7 +597,6 @@ def render_panel_with_selector(title, options, default_idx, year_df, filter_col,
         variance = actual - target if pd.notna(actual) and pd.notna(target) else np.nan
         rate = actual / target * 100 if pd.notna(actual) and pd.notna(target) and target > 0 else np.nan
 
-        st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
         a, b, c, d = st.columns(4)
         a.metric(t["variance"], num(variance))
         b.metric(t["achievement"], pct(rate))
@@ -605,7 +628,6 @@ def render_panel_with_selector(title, options, default_idx, year_df, filter_col,
                             key=f"{key}_{product}"
                         )
 
-        st.markdown("</div>", unsafe_allow_html=True)
         return selected_val
 
 
@@ -889,106 +911,110 @@ with month_col:
     )
 
 with daily_col:
-    st.markdown(f'<div class="panel-heading">📋 {t["daily"]}</div>', unsafe_allow_html=True)
-    daily_df, daily_error = daily_data_from_sheet(sheets)
+    with st.container(border=True):
+        st.markdown(
+            f'<div class="section-heading" style="margin-top:0;">📋 {t["daily"]}</div>',
+            unsafe_allow_html=True
+        )
+        daily_df, daily_error = daily_data_from_sheet(sheets)
 
-    if daily_error:
-        st.error(daily_error)
-    elif daily_df is None or daily_df.empty:
-        st.warning("لا توجد بيانات مبيعات يومية صالحة في شيت Data.")
-    else:
-        dy_filtered = daily_df[daily_df["Year"] == int(year)].copy()
-        selected_month_number = MONTHS.index(month) + 1
-        dy_filtered = dy_filtered[dy_filtered["Month_Num"] == selected_month_number].copy()
-
-        if dy_filtered.empty:
-            st.info(f"لا توجد مبيعات مسجلة في {MONTH_AR[month]} {year}.")
+        if daily_error:
+            st.error(daily_error)
+        elif daily_df is None or daily_df.empty:
+            st.warning("لا توجد بيانات مبيعات يومية صالحة في شيت Data.")
         else:
-            min_d = dy_filtered["Date_Only"].min()
-            max_d = dy_filtered["Date_Only"].max()
+            dy_filtered = daily_df[daily_df["Year"] == int(year)].copy()
+            selected_month_number = MONTHS.index(month) + 1
+            dy_filtered = dy_filtered[dy_filtered["Month_Num"] == selected_month_number].copy()
 
-            st.markdown(
-                f'<div class="period-badge">{t["period_display"]} {min_d} إلى {max_d}</div>',
-                unsafe_allow_html=True
-            )
-
-            filter_mode = st.radio(
-                "طريقة العرض:",
-                ["جميع الأيام", "تاريخ محدد", "نطاق تاريخي"],
-                horizontal=True,
-                key="daily_filter_mode"
-            )
-
-            daily_view = dy_filtered.copy()
-
-            if filter_mode == "تاريخ محدد":
-                selected_date = st.date_input(
-                    "اختر اليوم المطلوب:",
-                    value=max_d,
-                    min_value=min_d,
-                    max_value=max_d,
-                    key="daily_single_date"
-                )
-                if selected_date:
-                    daily_view = daily_view[daily_view["Date_Only"] == selected_date]
-
-            elif filter_mode == "نطاق تاريخي":
-                date_range = st.date_input(
-                    "اختر نطاق التواريخ:",
-                    value=(min_d, max_d),
-                    min_value=min_d,
-                    max_value=max_d,
-                    key="daily_date_range"
-                )
-                if isinstance(date_range, tuple) and len(date_range) == 2:
-                    start_d, end_d = date_range
-                    if start_d and end_d:
-                        daily_view = daily_view[
-                            (daily_view["Date_Only"] >= start_d) &
-                            (daily_view["Date_Only"] <= end_d)
-                        ]
-
-            if not daily_view.empty:
-                grouped_daily = (
-                    daily_view.groupby("Date_Only", as_index=False)
-                    .agg(
-                        Sales_Count=("Amount", lambda s: s.notna().sum()),
-                        Total_I_Sum=("Total_I", lambda s: s.sum(min_count=1)),
-                        Customer_Count=("Customer_No", "nunique"),
-                        Total_Amount=("Amount", lambda s: s.sum(min_count=1))
-                    )
-                    .sort_values("Date_Only", ascending=False)
-                )
-
-                display_daily = grouped_daily.rename(
-                    columns={
-                        "Date_Only": "التاريخ",
-                        "Sales_Count": t["sales_count"],
-                        "Total_I_Sum": t["total_i"],
-                        "Customer_Count": t["customer_count"],
-                        "Total_Amount": t["total_amount"]
-                    }
-                )
-
-                format_dict = {
-                    t["total_i"]: "{:,.2f}",
-                    t["total_amount"]: "{:,.2f}"
-                }
-
-                st.dataframe(
-                    display_daily.style.format(format_dict, na_rep="—"),
-                    use_container_width=True,
-                    hide_index=True,
-                    height=260
-                )
-
-                st.markdown("#### 📊 إجمالي الفترة المعروضة")
-                m1, m2, m3 = st.columns(3)
-                m1.metric(t["sales_count"], f"{len(daily_view):,}")
-                m2.metric(t["total_i"], num(daily_view["Total_I"].sum(min_count=1)))
-                m3.metric(t["total_amount"], num(daily_view["Amount"].sum(min_count=1)))
+            if dy_filtered.empty:
+                st.info(f"لا توجد مبيعات مسجلة في {MONTH_AR[month]} {year}.")
             else:
-                st.warning("لا توجد مبيعات في التاريخ المحدد.")
+                min_d = dy_filtered["Date_Only"].min()
+                max_d = dy_filtered["Date_Only"].max()
+
+                st.markdown(
+                    f'<div class="period-badge">{t["period_display"]} {min_d} إلى {max_d}</div>',
+                    unsafe_allow_html=True
+                )
+
+                filter_mode = st.radio(
+                    "طريقة العرض:",
+                    ["جميع الأيام", "تاريخ محدد", "نطاق تاريخي"],
+                    horizontal=True,
+                    key="daily_filter_mode"
+                )
+
+                daily_view = dy_filtered.copy()
+
+                if filter_mode == "تاريخ محدد":
+                    selected_date = st.date_input(
+                        "اختر اليوم المطلوب:",
+                        value=max_d,
+                        min_value=min_d,
+                        max_value=max_d,
+                        key="daily_single_date"
+                    )
+                    if selected_date:
+                        daily_view = daily_view[daily_view["Date_Only"] == selected_date]
+
+                elif filter_mode == "نطاق تاريخي":
+                    date_range = st.date_input(
+                        "اختر نطاق التواريخ:",
+                        value=(min_d, max_d),
+                        min_value=min_d,
+                        max_value=max_d,
+                        key="daily_date_range"
+                    )
+                    if isinstance(date_range, tuple) and len(date_range) == 2:
+                        start_d, end_d = date_range
+                        if start_d and end_d:
+                            daily_view = daily_view[
+                                (daily_view["Date_Only"] >= start_d) &
+                                (daily_view["Date_Only"] <= end_d)
+                            ]
+
+                if not daily_view.empty:
+                    grouped_daily = (
+                        daily_view.groupby("Date_Only", as_index=False)
+                        .agg(
+                            Sales_Count=("Amount", lambda s: s.notna().sum()),
+                            Total_I_Sum=("Total_I", lambda s: s.sum(min_count=1)),
+                            Customer_Count=("Customer_No", "nunique"),
+                            Total_Amount=("Amount", lambda s: s.sum(min_count=1))
+                        )
+                        .sort_values("Date_Only", ascending=False)
+                    )
+
+                    display_daily = grouped_daily.rename(
+                        columns={
+                            "Date_Only": "التاريخ",
+                            "Sales_Count": t["sales_count"],
+                            "Total_I_Sum": t["total_i"],
+                            "Customer_Count": t["customer_count"],
+                            "Total_Amount": t["total_amount"]
+                        }
+                    )
+
+                    format_dict = {
+                        t["total_i"]: "{:,.2f}",
+                        t["total_amount"]: "{:,.2f}"
+                    }
+
+                    st.dataframe(
+                        display_daily.style.format(format_dict, na_rep="—"),
+                        use_container_width=True,
+                        hide_index=True,
+                        height=260
+                    )
+
+                    st.markdown("#### 📊 إجمالي الفترة المعروضة")
+                    m1, m2, m3 = st.columns(3)
+                    m1.metric(t["sales_count"], f"{len(daily_view):,}")
+                    m2.metric(t["total_i"], num(daily_view["Total_I"].sum(min_count=1)))
+                    m3.metric(t["total_amount"], num(daily_view["Amount"].sum(min_count=1)))
+                else:
+                    st.warning("لا توجد مبيعات في التاريخ المحدد.")
 
 
 # =========================================================
