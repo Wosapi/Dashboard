@@ -315,4 +315,180 @@ if sheets_dict is not None:
             st.plotly_chart(plot_monthly_target_vs_actual(m_summary), use_container_width=True, config={'displayModeBar': False})
 
             # --- 3. تصميم نسب تحقيق المستهدف حسب فئة المنتج (بطاقات مربعة) جنباً إلى جنب مع التحليل الربعي للأعمدة ---
-            st.markdown("### 🎯 نسب تحقيق المستهدف حسب فئة
+            st.markdown("### 🎯 نسب تحقيق المستهدف حسب فئة المنتج والتحليل الربعي")
+            
+            prod_colors = {
+                "Fluids": COLORS["navy_blue"],
+                "DEO": COLORS["teal"],
+                "Syn": COLORS["orange"],
+                "Min": COLORS["dark_blue"]
+            }
+            
+            # قسمنا الشاشة لجزأين جنباً إلى جنب (قسم الدوائر المربعة لأربع فئات + قسم تحليل الأعمدة الربعي)
+            col_left, col_right = st.columns([2, 1])
+
+            with col_left:
+                st.markdown("##### نسب الإنجاز حسب فئة المنتج")
+                d_cols = st.columns(4)
+                for idx, prod in enumerate(PRODUCTS):
+                    prod_filtered = clean_df[
+                        (clean_df["Year"] == selected_year) & 
+                        (clean_df["Quarter"].isin(selected_quarters)) & 
+                        (clean_df["Product"] == prod)
+                    ]
+                    p_target = prod_filtered["Target"].sum()
+                    p_actual = prod_filtered["Actual"].sum(min_count=1)
+                    p_pct = (p_actual / p_target * 100) if (pd.notna(p_actual) and p_target > 0) else np.nan
+                    p_monthly_trend = summarize_by_period(prod_filtered, ["Month_Num", "Month"]).sort_values("Month_Num")
+
+                    with d_cols[idx]:
+                        st.markdown("<div class='product-card'>", unsafe_allow_html=True)
+                        st.plotly_chart(create_donut_chart(p_pct, prod_colors[prod]), use_container_width=True, config={'displayModeBar': False})
+                        st.markdown(f"**فئة {prod}**", unsafe_allow_html=True)
+                        st.plotly_chart(plot_mini_trend(p_monthly_trend, prod_colors[prod]), use_container_width=True, config={'displayModeBar': False})
+                        a_str = f"{p_actual:,.2f}" if pd.notna(p_actual) else "0.00"
+                        st.markdown(f"<span style='font-size:10px; color:#555;'>الفعلي: {a_str}<br>المستهدف: {p_target:,.2f}</span>", unsafe_allow_html=True)
+                        st.markdown("</div>", unsafe_allow_html=True)
+
+            with col_right:
+                st.markdown("##### 🗓️ التحليل الربعي للأعمدة")
+                q_summary = summarize_by_period(filtered_df, ["Quarter"])
+                fig_q = go.Figure()
+                fig_q.add_trace(go.Bar(
+                    x=q_summary["Quarter"], y=q_summary["Target"],
+                    name="مستهدف الربع", marker_color=COLORS["navy_blue"]
+                ))
+                fig_q.add_trace(go.Bar(
+                    x=q_summary["Quarter"], y=q_summary["Actual"],
+                    name="فعلي الربع", marker_color=COLORS["teal"]
+                ))
+                fig_q.update_layout(
+                    barmode="group",
+                    plot_bgcolor=COLORS["white"],
+                    paper_bgcolor=COLORS["white"],
+                    font_color=COLORS["text"],
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    height=270,
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10))
+                )
+                st.plotly_chart(fig_q, use_container_width=True, config={'displayModeBar': False})
+
+            st.markdown("---")
+
+            # --- 4. تفاصيل المبيعات الشهرية عبر بطاقات دائرية للشهر المحدد ---
+            st.subheader(f"🔍 مقارنة منتجات الشهر المفصل (بطاقات نسب الإنجاز) - {selected_year}")
+            selected_single_month = st.selectbox("اختر الشهر لعرض دوائر نسب تحقيقه الكاملة:", VALID_MONTHS, index=0)
+            
+            single_month_df = clean_df[
+                (clean_df["Year"] == selected_year) & 
+                (clean_df["Month"] == selected_single_month) &
+                (clean_df["Product"].isin(selected_products))
+            ].copy()
+            single_month_enriched = enrich_metrics(single_month_df)
+
+            sm_target = single_month_enriched["Target"].sum()
+            sm_actual = single_month_enriched["Actual"].sum(min_count=1)
+            sm_ach = (sm_actual / sm_target * 100) if (pd.notna(sm_actual) and sm_target > 0) else np.nan
+            sm_var = (sm_actual - sm_target) if pd.notna(sm_actual) else np.nan
+
+            sm1, sm2, sm3, sm4 = st.columns(4)
+            sm1.metric(f"مستهدف شهر {selected_single_month}", f"{sm_target:,.2f}")
+            sm2.metric(f"فعلي شهر {selected_single_month}", f"{sm_actual:,.2f}" if pd.notna(sm_actual) else "غير مسجل")
+            sm3.metric("نسبة تحقيق الشهر", f"{sm_ach:.1f}%" if pd.notna(sm_ach) else "—")
+            sm4.metric("الفارق (Variance)", f"{sm_var:+,.2f}" if pd.notna(sm_var) else "—")
+
+            st.markdown(f"**نسب تحقيق المنتجات لشهر {selected_single_month}:**")
+            m_d_cols = st.columns(len(PRODUCTS))
+            for idx, prod in enumerate(PRODUCTS):
+                p_row = single_month_enriched[single_month_enriched["Product"] == prod]
+                p_pct = p_row["Achievement %"].values[0] if not p_row.empty else np.nan
+                p_t = p_row["Target"].values[0] if not p_row.empty else 0
+                p_a = p_row["Actual"].values[0] if not p_row.empty else np.nan
+                
+                with m_d_cols[idx]:
+                    st.markdown(f"<div style='background-color: white; padding: 12px; border-radius: 12px; text-align: center;'>", unsafe_allow_html=True)
+                    st.plotly_chart(create_donut_chart(p_pct, prod_colors[prod]), use_container_width=True, config={'displayModeBar': False})
+                    p_a_str = f"{p_a:,.2f}" if pd.notna(p_a) else "0.00"
+                    st.markdown(f"**{prod}**<br><span style='font-size:11px; color:#555;'>الفعلي: {p_a_str} <br> المستهدف: {p_t:,.2f}</span></div>", unsafe_allow_html=True)
+
+            st.markdown("---")
+
+            # --- 5. تفاصيل المبيعات اليومية من شيت Sales Report ---
+            st.subheader("📅 تحليل المبيعات اليومية (Daily Sales Breakdown)")
+            daily_sheets = detect_daily_sales_data(sheets_dict)
+
+            if not daily_sheets:
+                st.info("لم يتم العثور على شيت باسم 'Sales Report' في الملف المرفق، أو أن الشيت لا يحتوي على عمود تاريخ صالح.")
+            else:
+                chosen_daily_sheet = list(daily_sheets.keys())[0]
+                daily_df, date_col_name = daily_sheets[chosen_daily_sheet]
+
+                daily_years = sorted(daily_df["Parsed_Date"].dt.year.unique().tolist())
+                d_col_f1, d_col_f2, d_col_f3 = st.columns(3)
+                with d_col_f1:
+                    d_year = st.selectbox("سنة المبيعات اليومية:", daily_years, index=len(daily_years)-1)
+                
+                daily_year_df = daily_df[daily_df["Parsed_Date"].dt.year == d_year].copy()
+                daily_year_df["Month_Name"] = daily_year_df["Parsed_Date"].dt.strftime("%b")
+                
+                with d_col_f2:
+                    avail_d_months = ["الكل"] + [m for m in VALID_MONTHS if m in daily_year_df["Month_Name"].unique()]
+                    d_month = st.selectbox("تصفية بشهر معين (يومي):", avail_d_months)
+                
+                numeric_cols = [c for c in daily_year_df.select_dtypes(include=[np.number]).columns if c not in ["Year", "Month", "Parsed_Date"]]
+                with d_col_f3:
+                    val_col = st.selectbox("اختر عمود القيمة / الكمية:", numeric_cols) if numeric_cols else None
+
+                if d_month != "الكل":
+                    daily_year_df = daily_year_df[daily_year_df["Month_Name"] == d_month]
+
+                if val_col and not daily_year_df.empty:
+                    daily_year_df["Date_Only"] = daily_year_df["Parsed_Date"].dt.date
+                    daily_grouped = daily_year_df.groupby("Date_Only", as_index=False)[val_col].sum().sort_values("Date_Only")
+
+                    total_d_sales = daily_grouped[val_col].sum()
+                    avg_d_sales = daily_grouped[val_col].mean()
+                    max_d_row = daily_grouped.loc[daily_grouped[val_col].idxmax()]
+                    active_days = len(daily_grouped[daily_grouped[val_col] > 0])
+
+                    dk1, dk2, dk3, dk4 = st.columns(4)
+                    dk1.metric("إجمالي المبيعات للفترة", f"{total_d_sales:,.2f}")
+                    dk2.metric("متوسط البيع اليومي", f"{avg_d_sales:,.2f}")
+                    dk3.metric("أعلى يوم مبيعاً", f"{max_d_row['Date_Only']} ({max_d_row[val_col]:,.2f})")
+                    dk4.metric("عدد أيام البيع المسجلة", f"{active_days} يوم")
+
+                    fig_daily = px.bar(
+                        daily_grouped, x="Date_Only", y=val_col,
+                        title=f"المبيعات اليومية ({val_col}) - {d_month} {d_year}",
+                        color_discrete_sequence=[COLORS["teal"]]
+                    )
+                    fig_daily.update_layout(plot_bgcolor=COLORS["white"], paper_bgcolor=COLORS["white"], xaxis_title="التاريخ", yaxis_title=val_col)
+                    st.plotly_chart(fig_daily, use_container_width=True, config={'displayModeBar': False})
+                    
+                    with st.expander("عرض سجل الحركات اليومية التفصيلي"):
+                        st.dataframe(daily_year_df.drop(columns=["Parsed_Date", "Date_Only"], errors="ignore"), use_container_width=True)
+                else:
+                    st.dataframe(daily_year_df.drop(columns=["Parsed_Date"], errors="ignore"), use_container_width=True)
+
+            st.markdown("---")
+
+            # --- 7. الجداول التحليلية والتصدير ---
+            st.subheader("📋 الجداول التحليلية المفصلة")
+            tab1, tab2, tab3, tab4 = st.tabs(["التفصيل الشهري العام", f"تفصيل شهر {selected_single_month}", "تفصيل المنتجات", "مقارنة السنوات"])
+            with tab1: st.dataframe(m_summary.drop(columns=["Month_Num"]).style.format({"Target": "{:,.2f}", "Actual": "{:,.2f}", "Achievement %": "{:.1f}%"}, na_rep="—"), use_container_width=True)
+            with tab2: st.dataframe(single_month_enriched.drop(columns=["Month_Num"]).style.format({"Target": "{:,.2f}", "Actual": "{:,.2f}", "Achievement %": "{:.1f}%"}, na_rep="—"), use_container_width=True)
+            with tab3: st.dataframe(summarize_by_period(filtered_df, ["Product", "Quarter"]).style.format({"Target": "{:,.2f}", "Actual": "{:,.2f}", "Achievement %": "{:.1f}%"}, na_rep="—"), use_container_width=True)
+            with tab4: st.dataframe(summarize_by_period(clean_df[clean_df["Product"].isin(selected_products)], ["Year"]).style.format({"Target": "{:,.2f}", "Actual": "{:,.2f}", "Achievement %": "{:.1f}%"}, na_rep="—"), use_container_width=True)
+
+            st.markdown("### 📥 تصدير التقارير")
+            export_sheets = {
+                "Monthly_All": m_summary.drop(columns=["Month_Num"]),
+                f"Month_{selected_single_month}": single_month_enriched.drop(columns=["Month_Num"]),
+                "Quarterly": q_summary,
+                "Products": p_summary
+            }
+            if daily_sheets and 'daily_grouped' in locals():
+                export_sheets["Daily_Sales"] = daily_grouped
+
+            excel_bytes = convert_dfs_to_excel(export_sheets)
+            st.download_button("📊 تحميل التقرير الشامل (Excel متعدد الشيتات)", data=excel_bytes, file_name=f"Sales_Analysis_{selected_year}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
