@@ -6,46 +6,126 @@ import plotly.graph_objects as go
 import io
 
 st.set_page_config(
-    page_title="لوحة تحكم أداء المبيعات المتقدمة",
+    page_title="Advanced Sales Dashboard",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# الثوابت والألوان
+# لوحة ألوان احترافية حديثة
 COLORS = {
-    "navy_blue": "#142B4A",
-    "dark_blue": "#1E3A5F",
-    "teal": "#00A6A6",
-    "green": "#16A36A",
-    "orange": "#F59E0B",
-    "red": "#DC3545",
-    "background": "#F4F7FB",
+    "primary": "#0F172A",      # Slate Dark
+    "secondary": "#1E293B",    # Slate Medium
+    "accent_teal": "#0D9488",  # Modern Teal
+    "accent_orange": "#D97706",# Warm Amber
+    "accent_blue": "#2563EB",  # Royal Blue
+    "background": "#F8FAFC",   # Clean Light Background
     "white": "#FFFFFF",
-    "text": "#263445"
+    "text": "#334155",         # Slate Text
+    "gray_light": "#E2E8F0"
 }
+
 PRODUCTS = ["Min", "Syn", "DEO", "Fluids"]
 VALID_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
-# تنسيق CSS عام للبطاقات والعناوين
-st.markdown("""
-<style>
-body { background-color: #F4F7FB; color: #263445; direction: rtl; text-align: right; }
-.stMetric { background-color: #FFFFFF; padding: 14px; border-radius: 10px; box-shadow: 0 3px 6px rgba(0,0,0,0.05); }
-h1, h2, h3 { color: #142B4A; }
-.custom-card {
-    background-color: #FFFFFF;
-    border: 1px solid #E2E8F0;
-    border-radius: 12px;
-    padding: 12px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.02);
-    margin-bottom: 10px;
+# ترجمة النصوص للغتين
+TEXTS = {
+    "ar": {
+        "title": "📊 لوحة تحكم أداء المبيعات والتحليل المتقدم",
+        "subtitle": "تحليل شامل للمستهدف والمبيعات الفعلية (سنوي، نصف سنوي، ربعي، شهري مفصل، والمبيعات اليومية).",
+        "sidebar_lang": "🌍 اللغة / Language",
+        "sidebar_data": "📂 مصدر البيانات",
+        "sidebar_upload": "ارفع ملف Excel (.xlsx أو .xlsb)",
+        "sidebar_filters": "🎛️ الفلاتر التفاعلية",
+        "year": "اختر السنة",
+        "products": "المنتجات",
+        "quarters": "الأرباع السنوية",
+        "kpi_target": "إجمالي المستهدف",
+        "kpi_actual": "إجمالي الفعلي",
+        "kpi_ach": "نسبة التحقيق",
+        "kpi_rem": "المتبقي",
+        "kpi_best_month": "أفضل شهر",
+        "kpi_best_prod": "أفضل منتج",
+        "monthly_overview": "📈 نظرة عامة على الأداء الشهري لعام",
+        "half_analysis": "📅 تحليل الأداء النصف السنوي",
+        "select_half": "اختر النصف السنوي:",
+        "quarter_analysis": "🎯 تحليل أداء المنتجات مقابل الإجمالي الربعي",
+        "select_quarter": "اختر الربع السنوي:",
+        "monthly_analysis": "🔍 تحليل أداء المنتجات مقابل إجمالي المبيعات لشهر",
+        "select_month": "اختر الشهر:",
+        "daily_analysis": "📅 تحليل المبيعات اليومية (Daily Sales Breakdown)",
+        "daily_year": "سنة المبيعات اليومية:",
+        "daily_month": "تصفية بشهر معين:",
+        "daily_val": "اختر عمود القيمة / الكمية:",
+        "tables": "📋 الجداول التحليلية المفصلة",
+        "export": "📥 تصدير التقارير",
+        "download_btn": "📊 تحميل التقرير الشامل (Excel)",
+        "variance": "الفارق (Variance)",
+        "ach_rate": "نسبة التحقيق",
+        "actual": "الفعلي",
+        "target": "المستهدف",
+        "all": "الكل"
+    },
+    "en": {
+        "title": "📊 Advanced Sales Performance Dashboard",
+        "subtitle": "Comprehensive analysis of targets and actual sales (Annual, H-Year, Quarterly, Monthly, and Daily).",
+        "sidebar_lang": "🌍 Language / اللغة",
+        "sidebar_data": "📂 Data Source",
+        "sidebar_upload": "Upload Excel file (.xlsx or .xlsb)",
+        "sidebar_filters": "🎛️ Interactive Filters",
+        "year": "Select Year",
+        "products": "Products",
+        "quarters": "Quarters",
+        "kpi_target": "Total Target",
+        "kpi_actual": "Total Actual",
+        "kpi_ach": "Achievement %",
+        "kpi_rem": "Remaining",
+        "kpi_best_month": "Best Month",
+        "kpi_best_prod": "Best Product",
+        "monthly_overview": "📈 Monthly Performance Overview for",
+        "half_analysis": "📅 Half-Year Performance Analysis",
+        "select_half": "Select Half-Year:",
+        "quarter_analysis": "🎯 Product Performance vs Quarterly Total",
+        "select_quarter": "Select Quarter:",
+        "monthly_analysis": "🔍 Product Performance vs Monthly Total for",
+        "select_month": "Select Month:",
+        "daily_analysis": "📅 Daily Sales Breakdown",
+        "daily_year": "Daily Sales Year:",
+        "daily_month": "Filter by Month:",
+        "daily_val": "Select Value/Qty Column:",
+        "tables": "📋 Detailed Analytical Tables",
+        "export": "📥 Export Reports",
+        "download_btn": "📊 Download Comprehensive Report (Excel)",
+        "variance": "Variance",
+        "ach_rate": "Achievement Rate",
+        "actual": "Actual",
+        "target": "Target",
+        "all": "All"
+    }
 }
+
+# إعداد اللغة الافتراضية في القائمة الجانبية أولاً
+st.sidebar.header("🌍 Language / اللغة")
+lang_choice = st.sidebar.selectbox("Choose Language / اختر اللغة", ["العربية", "English"], index=0)
+lang = "ar" if lang_choice == "العربية" else "en"
+t = TEXTS[lang]
+
+# تنسيق CSS لتقليل المساحات الفارغة (Compact & Clean Spacing) وضبط الاتجاه حسب اللغة
+direction = "rtl" if lang == "ar" else "ltr"
+align = "right" if lang == "ar" else "left"
+
+st.markdown(f"""
+<style>
+body {{ background-color: {COLORS["background"]}; color: {COLORS["text"]}; direction: {direction}; text-align: {align}; }}
+.stMetric {{ background-color: {COLORS["white"]}; padding: 10px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); border: 1px solid {COLORS["gray_light"]}; }}
+h1, h2, h3 {{ color: {COLORS["primary"]}; margin-bottom: 0.3rem; margin-top: 0.5rem; }}
+.block-container {{ padding-top: 1.2rem; padding-bottom: 1.2rem; }}
+hr {{ margin: 1rem 0; border: none; border-top: 1px solid {COLORS["gray_light"]}; }}
 </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 لوحة تحكم أداء المبيعات والتحليل المتقدم")
-st.markdown("تحليل شامل للمستهدف والمبيعات الفعلية (سنوي، نصف سنوي، ربعي، شهري مفصل، والمبيعات اليومية).")
+st.title(t["title"])
+st.markdown(t["subtitle"])
 
 # --- 1. محرك تحميل جميع الشيتات ---
 @st.cache_data
@@ -66,7 +146,7 @@ def load_all_sheets(uploaded_file):
             sheets_dict[name] = df_temp
         return sheets_dict
     except Exception as e:
-        st.error(f"خطأ في قراءة ملف Excel: {e}")
+        st.error(f"Error reading Excel file: {e}")
         return None
 
 # --- 2. معالجة هيكل شيت Target ---
@@ -131,7 +211,7 @@ def parse_target_sheet(raw_df):
         if "Actual" not in pivoted.columns: pivoted["Actual"] = np.nan
         return pivoted.sort_values(["Year", "Month_Num", "Product"])
     except Exception as e:
-        st.error(f"خطأ أثناء معالجة شيت Target: {e}")
+        st.error(f"Error parsing Target sheet: {e}")
         return None
 
 # --- 3. محرك استخراج وتحليل المبيعات اليومية من شيت Sales Report ---
@@ -213,9 +293,9 @@ def summarize_by_period(df, group_cols):
 # --- 5. الرسوم البيانية ---
 def plot_monthly_target_vs_actual(monthly_df):
     fig = go.Figure()
-    fig.add_trace(go.Bar(x=monthly_df["Month"], y=monthly_df["Target"], name="المستهدف (Target)", marker_color=COLORS["navy_blue"], text=monthly_df["Target"].round(2), textposition="auto"))
-    fig.add_trace(go.Bar(x=monthly_df["Month"], y=monthly_df["Actual"], name="الفعلي (Actual)", marker_color=COLORS["teal"], text=monthly_df["Actual"].round(2), textposition="auto"))
-    fig.update_layout(barmode="group", plot_bgcolor=COLORS["white"], paper_bgcolor=COLORS["white"], font_color=COLORS["text"], margin=dict(l=20, r=20, t=40, b=20), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+    fig.add_trace(go.Bar(x=monthly_df["Month"], y=monthly_df["Target"], name=t["target"], marker_color=COLORS["primary"], text=monthly_df["Target"].round(2), textposition="auto"))
+    fig.add_trace(go.Bar(x=monthly_df["Month"], y=monthly_df["Actual"], name=t["actual"], marker_color=COLORS["accent_teal"], text=monthly_df["Actual"].round(2), textposition="auto"))
+    fig.update_layout(barmode="group", plot_bgcolor=COLORS["white"], paper_bgcolor=COLORS["white"], font_color=COLORS["text"], margin=dict(l=10, r=10, t=20, b=10), height=280, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
     return fig
 
 def create_donut_chart(percentage, color, product_name="", actual_val=None, target_val=None):
@@ -225,16 +305,16 @@ def create_donut_chart(percentage, color, product_name="", actual_val=None, targ
     act_str = f"{actual_val:,.2f}" if (actual_val is not None and not pd.isna(actual_val)) else "0.00"
     tgt_str = f"{target_val:,.2f}" if (target_val is not None and not pd.isna(target_val)) else "0.00"
     
-    center_text = f"<b>{product_name}</b><br><span style='font-size:13px; color:#142B4A;'><b>{pct_text}</b></span><br><span style='font-size:8px; color:#555;'>{act_str} / {tgt_str}</span>" if product_name else f"<b>{pct_text}</b>"
+    center_text = f"<b>{product_name}</b><br><span style='font-size:12px; color:{COLORS["primary"]};'><b>{pct_text}</b></span><br><span style='font-size:8px; color:#64748B;'>{act_str} / {tgt_str}</span>" if product_name else f"<b>{pct_text}</b>"
     
-    fig = go.Figure(data=[go.Pie(values=[display_val, 100 - display_val], hole=0.7, marker_colors=[color, "#E2E8F0"], textinfo="none", hoverinfo="none", sort=False)])
+    fig = go.Figure(data=[go.Pie(values=[display_val, 100 - display_val], hole=0.7, marker_colors=[color, COLORS["gray_light"]], textinfo="none", hoverinfo="none", sort=False)])
     fig.update_layout(
         showlegend=False, 
         annotations=[dict(text=center_text, x=0.5, y=0.5, font_size=10, font_color=COLORS["text"], showarrow=False)], 
         plot_bgcolor="rgba(0,0,0,0)", 
         paper_bgcolor="rgba(0,0,0,0)", 
         margin=dict(l=2, r=2, t=2, b=2), 
-        height=140
+        height=130
     )
     return fig
 
@@ -245,34 +325,34 @@ def convert_dfs_to_excel(sheets_dict):
             df.to_excel(writer, sheet_name=s_name[:31], index=False)
     return output.getvalue()
 
-# --- خانة رفع الملف ---
-st.sidebar.header("📂 مصدر البيانات")
-uploaded_file = st.sidebar.file_uploader("ارفع ملف Excel (.xlsx أو .xlsb)", type=["xlsx", "xls", "xlsb"])
+# --- خانة رفع الملف في القائمة الجانبية ---
+st.sidebar.header(t["sidebar_data"])
+uploaded_file = st.sidebar.file_uploader(t["sidebar_upload"], type=["xlsx", "xls", "xlsb"])
 
 sheets_dict = load_all_sheets(uploaded_file)
 
 if sheets_dict is None:
-    st.markdown("### 📤 يرجى رفع ملف الإكسل (Total_Sales.xlsb أو .xlsx) للبدء:")
-    uploaded_file_main = st.file_uploader("اختر ملف الإكسل من هنا:", type=["xlsx", "xls", "xlsb"], key="main_uploader")
+    st.markdown(f"### 📤 {t['sidebar_upload']}")
+    uploaded_file_main = st.file_uploader("", type=["xlsx", "xls", "xlsb"], key="main_uploader")
     if uploaded_file_main is not None:
         sheets_dict = load_all_sheets(uploaded_file_main)
         st.rerun()
     else:
-        st.info("👈 ارفع الملف أعلاه أو من القائمة الجانبية لتظهر لك لوحة التحكم بكامل ميزاتها.")
+        st.info("👈 Please upload your Excel file to start / يرجى رفع ملف الإكسل للبدء.")
 
 if sheets_dict is not None:
     if "Target" not in sheets_dict:
-        st.error("شيت 'Target' غير موجود في الملف المرفق.")
+        st.error("Sheet 'Target' not found in the uploaded file.")
     else:
         clean_df = parse_target_sheet(sheets_dict["Target"])
         if clean_df is None or clean_df.empty:
-            st.error("تعذر التعرف على هيكل شيت Target.")
+            st.error("Could not parse Target sheet structure.")
         else:
             available_years = sorted(clean_df["Year"].unique().tolist())
-            st.sidebar.header("🎛️ الفلاتر التفاعلية")
-            selected_year = st.sidebar.selectbox("اختر السنة", available_years, index=len(available_years)-1)
-            selected_products = st.sidebar.multiselect("المنتجات", PRODUCTS, default=PRODUCTS)
-            selected_quarters = st.sidebar.multiselect("الأرباع السنوية", ["Q1", "Q2", "Q3", "Q4"], default=["Q1", "Q2", "Q3", "Q4"])
+            st.sidebar.header(t["sidebar_filters"])
+            selected_year = st.sidebar.selectbox(t["year"], available_years, index=len(available_years)-1)
+            selected_products = st.sidebar.multiselect(t["products"], PRODUCTS, default=PRODUCTS)
+            selected_quarters = st.sidebar.multiselect(t["quarters"], ["Q1", "Q2", "Q3", "Q4"], default=["Q1", "Q2", "Q3", "Q4"])
 
             filtered_df = clean_df[(clean_df["Year"] == selected_year) & (clean_df["Product"].isin(selected_products)) & (clean_df["Quarter"].isin(selected_quarters))].copy()
 
@@ -284,30 +364,30 @@ if sheets_dict is not None:
 
             m_summary = summarize_by_period(filtered_df, ["Month_Num", "Month"]).sort_values("Month_Num")
             valid_m = m_summary.dropna(subset=["Actual"])
-            best_month = valid_m.loc[valid_m["Actual"].idxmax(), "Month"] if not valid_m.empty else "لا يوجد"
+            best_month = valid_m.loc[valid_m["Actual"].idxmax(), "Month"] if not valid_m.empty else "N/A"
 
             p_summary = summarize_by_period(filtered_df, ["Product"])
             valid_p = p_summary.dropna(subset=["Actual"])
-            best_prod = valid_p.loc[valid_p["Actual"].idxmax(), "Product"] if not valid_p.empty else "لا يوجد"
+            best_prod = valid_p.loc[valid_p["Actual"].idxmax(), "Product"] if not valid_p.empty else "N/A"
 
             k1, k2, k3, k4, k5, k6 = st.columns(6)
-            k1.metric("إجمالي المستهدف", f"{total_target:,.2f}")
-            k2.metric("إجمالي الفعلي", f"{total_actual:,.2f}" if pd.notna(total_actual) else "غير مسجل")
-            k3.metric("نسبة التحقيق", f"{ach_pct:.1f}%" if pd.notna(ach_pct) else "—")
-            k4.metric("المتبقي", f"{remaining:,.2f}")
-            k5.metric("أفضل شهر", best_month)
-            k6.metric("أفضل منتج", best_prod)
+            k1.metric(t["kpi_target"], f"{total_target:,.2f}")
+            k2.metric(t["kpi_actual"], f"{total_actual:,.2f}" if pd.notna(total_actual) else "—")
+            k3.metric(t["kpi_ach"], f"{ach_pct:.1f}%" if pd.notna(ach_pct) else "—")
+            k4.metric(t["kpi_rem"], f"{remaining:,.2f}")
+            k5.metric(t["kpi_best_month"], best_month)
+            k6.metric(t["kpi_best_prod"], best_prod)
 
             st.markdown("---")
 
             # --- 2. الأداء الشهري العام ---
-            st.subheader(f"📈 نظرة عامة على الأداء الشهري لعام {selected_year}")
+            st.subheader(f"{t['monthly_overview']} {selected_year}")
             st.plotly_chart(plot_monthly_target_vs_actual(m_summary), use_container_width=True, config={'displayModeBar': False})
 
-            # --- 3. قسم تحليل الأداء النصف سنوي (تحكم مستقل لكل نصف) ---
+            # --- 3. تحليل الأداء النصف سنوي ---
             st.markdown("---")
-            st.subheader(f"📅 تحليل الأداء النصف السنوي - {selected_year}")
-            selected_half = st.selectbox("اختر النصف السنوي للعرض:", ["H1", "H2"], index=0)
+            st.subheader(f"{t['half_analysis']} - {selected_year}")
+            selected_half = st.selectbox(t["select_half"], ["H1", "H2"], index=0, key="half_select")
 
             half_df = clean_df[
                 (clean_df["Year"] == selected_year) & 
@@ -316,43 +396,39 @@ if sheets_dict is not None:
             ].copy()
 
             prod_colors = {
-                "Fluids": COLORS["navy_blue"],
-                "DEO": COLORS["teal"],
-                "Syn": COLORS["orange"],
-                "Min": COLORS["dark_blue"]
+                "Fluids": COLORS["primary"],
+                "DEO": COLORS["accent_teal"],
+                "Syn": COLORS["accent_orange"],
+                "Min": COLORS["accent_blue"]
             }
 
             col_h_right, col_h_left = st.columns([1, 1.3])
 
             with col_h_right:
-                st.markdown(f"##### 📊 إجمالي أداء النصف {selected_half}")
+                st.markdown(f"##### 📊 Performance Total ({selected_half})")
                 h_summary = summarize_by_period(half_df, ["Quarter"])
 
                 fig_h = go.Figure()
                 fig_h.add_trace(go.Bar(
                     x=h_summary["Quarter"], y=h_summary["Target"],
-                    name="المستهدف", marker_color=COLORS["navy_blue"],
+                    name=t["target"], marker_color=COLORS["primary"],
                     text=h_summary["Target"].apply(lambda x: f"{x:,.2f}"), textposition="auto"
                 ))
                 fig_h.add_trace(go.Bar(
                     x=h_summary["Quarter"], y=h_summary["Actual"],
-                    name="الفعلي", marker_color=COLORS["teal"],
-                    text=h_summary.apply(lambda r: f"{r['Actual']:,.2f}<br>({r['Achievement %']:.1f}%)" if pd.notna(r['Actual']) else "غير مسجل", axis=1), 
+                    name=t["actual"], marker_color=COLORS["accent_teal"],
+                    text=h_summary.apply(lambda r: f"{r['Actual']:,.2f}<br>({r['Achievement %']:.1f}%)" if pd.notna(r['Actual']) else "—", axis=1), 
                     textposition="auto"
                 ))
                 fig_h.update_layout(
-                    barmode="group",
-                    plot_bgcolor=COLORS["white"],
-                    paper_bgcolor=COLORS["white"],
-                    font_color=COLORS["text"],
-                    margin=dict(l=10, r=10, t=10, b=10),
-                    height=310,
+                    barmode="group", plot_bgcolor=COLORS["white"], paper_bgcolor=COLORS["white"], font_color=COLORS["text"],
+                    margin=dict(l=10, r=10, t=10, b=10), height=280,
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10))
                 )
                 st.plotly_chart(fig_h, use_container_width=True, config={'displayModeBar': False})
 
             with col_h_left:
-                st.markdown(f"##### نسب الإنجاز للمنتجات (نصف {selected_half})")
+                st.markdown(f"##### Products Achievement ({selected_half})")
                 for row_idx in range(2):
                     d_cols = st.columns(2)
                     for col_idx in range(2):
@@ -367,22 +443,21 @@ if sheets_dict is not None:
                             with d_cols[col_idx]:
                                 st.plotly_chart(create_donut_chart(p_pct, prod_colors[prod], product_name=prod, actual_val=p_actual, target_val=p_target), use_container_width=True, config={'displayModeBar': False})
 
-            # بطاقات الملخص النصف سنوي
             h_total_target = h_summary["Target"].sum()
             h_total_actual = h_summary["Actual"].sum(min_count=1)
             h_ach_pct = (h_total_actual / h_total_target * 100) if (pd.notna(h_total_actual) and h_total_target > 0) else np.nan
             h_var = (h_total_actual - h_total_target) if pd.notna(h_total_actual) else np.nan
 
             h_b1, h_b2, h_b3, h_b4 = st.columns(4)
-            h_b1.metric("الفارق (Variance)", f"{h_var:+,.2f}" if pd.notna(h_var) else "—")
-            h_b2.metric(f"نسبة تحقيق النصف {selected_half}", f"{h_ach_pct:.1f}%" if pd.notna(h_ach_pct) else "—")
-            h_b3.metric(f"إجمالي فعلي النصف {selected_half}", f"{h_total_actual:,.2f}" if pd.notna(h_total_actual) else "غير مسجل")
-            h_b4.metric(f"إجمالي مستهدف النصف {selected_half}", f"{h_total_target:,.2f}")
+            h_b1.metric(t["variance"], f"{h_var:+,.2f}" if pd.notna(h_var) else "—")
+            h_b2.metric(t["ach_rate"], f"{h_ach_pct:.1f}%" if pd.notna(h_ach_pct) else "—")
+            h_b3.metric(t["actual"], f"{h_total_actual:,.2f}" if pd.notna(h_total_actual) else "—")
+            h_b4.metric(t["target"], f"{h_total_target:,.2f}")
 
-            # --- 4. قسم تحليل الأداء الربعي (تحكم مستقل للأرباع) ---
+            # --- 4. تحليل الأداء الربعي ---
             st.markdown("---")
-            st.subheader(f"🎯 تحليل أداء المنتجات مقابل الإجمالي الربعي - {selected_year}")
-            selected_single_quarter = st.selectbox("اختر الربع السنوي للعرض:", ["Q1", "Q2", "Q3", "Q4"], index=2)
+            st.subheader(f"{t['quarter_analysis']} - {selected_year}")
+            selected_single_quarter = st.selectbox(t["select_quarter"], ["Q1", "Q2", "Q3", "Q4"], index=2, key="quarter_select")
 
             quarter_df = clean_df[
                 (clean_df["Year"] == selected_year) & 
@@ -393,34 +468,30 @@ if sheets_dict is not None:
             col_q_right, col_q_left = st.columns([1, 1.3])
 
             with col_q_right:
-                st.markdown(f"##### 📊 إجمالي أداء الربع {selected_single_quarter}")
+                st.markdown(f"##### 📊 Performance Total ({selected_single_quarter})")
                 q_single_summary = summarize_by_period(quarter_df, ["Quarter"])
 
                 fig_q = go.Figure()
                 fig_q.add_trace(go.Bar(
                     x=q_single_summary["Quarter"], y=q_single_summary["Target"],
-                    name="المستهدف", marker_color=COLORS["navy_blue"],
+                    name=t["target"], marker_color=COLORS["primary"],
                     text=q_single_summary["Target"].apply(lambda x: f"{x:,.2f}"), textposition="auto"
                 ))
                 fig_q.add_trace(go.Bar(
                     x=q_single_summary["Quarter"], y=q_single_summary["Actual"],
-                    name="الفعلي", marker_color=COLORS["teal"],
-                    text=q_single_summary.apply(lambda r: f"{r['Actual']:,.2f}<br>({r['Achievement %']:.1f}%)" if pd.notna(r['Actual']) else "غير مسجل", axis=1), 
+                    name=t["actual"], marker_color=COLORS["accent_teal"],
+                    text=q_single_summary.apply(lambda r: f"{r['Actual']:,.2f}<br>({r['Achievement %']:.1f}%)" if pd.notna(r['Actual']) else "—", axis=1), 
                     textposition="auto"
                 ))
                 fig_q.update_layout(
-                    barmode="group",
-                    plot_bgcolor=COLORS["white"],
-                    paper_bgcolor=COLORS["white"],
-                    font_color=COLORS["text"],
-                    margin=dict(l=10, r=10, t=10, b=10),
-                    height=310,
+                    barmode="group", plot_bgcolor=COLORS["white"], paper_bgcolor=COLORS["white"], font_color=COLORS["text"],
+                    margin=dict(l=10, r=10, t=10, b=10), height=280,
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10))
                 )
                 st.plotly_chart(fig_q, use_container_width=True, config={'displayModeBar': False})
 
             with col_q_left:
-                st.markdown(f"##### نسب الإنجاز للمنتجات (الربع {selected_single_quarter})")
+                st.markdown(f"##### Products Achievement ({selected_single_quarter})")
                 for row_idx in range(2):
                     d_cols = st.columns(2)
                     for col_idx in range(2):
@@ -435,23 +506,21 @@ if sheets_dict is not None:
                             with d_cols[col_idx]:
                                 st.plotly_chart(create_donut_chart(p_pct, prod_colors[prod], product_name=prod, actual_val=p_actual, target_val=p_target), use_container_width=True, config={'displayModeBar': False})
 
-            # بطاقات الملخص الربعي السفلي
             q_total_target = q_single_summary["Target"].sum()
             q_total_actual = q_single_summary["Actual"].sum(min_count=1)
             q_ach_pct = (q_total_actual / q_total_target * 100) if (pd.notna(q_total_actual) and q_total_target > 0) else np.nan
             q_var = (q_total_actual - q_total_target) if pd.notna(q_total_actual) else np.nan
 
             q_b1, q_b2, q_b3, q_b4 = st.columns(4)
-            q_b1.metric("الفارق (Variance)", f"{q_var:+,.2f}" if pd.notna(q_var) else "—")
-            q_b2.metric(f"نسبة تحقيق الربع {selected_single_quarter}", f"{q_ach_pct:.1f}%" if pd.notna(q_ach_pct) else "—")
-            q_b3.metric(f"إجمالي فعلي الربع {selected_single_quarter}", f"{q_total_actual:,.2f}" if pd.notna(q_total_actual) else "غير مسجل")
-            q_b4.metric(f"إجمالي مستهدف الربع {selected_single_quarter}", f"{q_total_target:,.2f}")
+            q_b1.metric(t["variance"], f"{q_var:+,.2f}" if pd.notna(q_var) else "—")
+            q_b2.metric(t["ach_rate"], f"{q_ach_pct:.1f}%" if pd.notna(q_ach_pct) else "—")
+            q_b3.metric(t["actual"], f"{q_total_actual:,.2f}" if pd.notna(q_total_actual) else "—")
+            q_b4.metric(t["target"], f"{q_total_target:,.2f}")
 
+            # --- 5. تحليل الأداء الشهري ---
             st.markdown("---")
-
-            # --- 5. قسم تحليل الأداء الشهري ---
-            selected_single_month = st.selectbox("اختر الشهر للعرض:", VALID_MONTHS, index=8)
-            st.subheader(f"🔍 تحليل أداء المنتجات مقابل إجمالي المبيعات لشهر {selected_single_month} - {selected_year}")
+            selected_single_month = st.selectbox(t["select_month"], VALID_MONTHS, index=8, key="month_select")
+            st.subheader(f"{t['monthly_analysis']} {selected_single_month} - {selected_year}")
             
             single_month_df = clean_df[
                 (clean_df["Year"] == selected_year) & 
@@ -468,31 +537,27 @@ if sheets_dict is not None:
             col_m_right, col_m_left = st.columns([1, 1.3])
 
             with col_m_right:
-                st.markdown(f"##### 📊 إجمالي مبيعات شهر {selected_single_month}")
+                st.markdown(f"##### 📊 Performance Total ({selected_single_month})")
                 fig_month_bar = go.Figure()
                 fig_month_bar.add_trace(go.Bar(
                     x=[selected_single_month], y=[sm_target],
-                    name="المستهدف", marker_color=COLORS["navy_blue"],
+                    name=t["target"], marker_color=COLORS["primary"],
                     text=[f"{sm_target:,.2f}"], textposition="auto"
                 ))
                 fig_month_bar.add_trace(go.Bar(
                     x=[selected_single_month], y=[sm_actual if pd.notna(sm_actual) else 0],
-                    name="الفعلي", marker_color=COLORS["teal"],
-                    text=[f"{sm_actual:,.2f}<br>({sm_ach:.1f}%)" if pd.notna(sm_actual) else "غير مسجل"], textposition="auto"
+                    name=t["actual"], marker_color=COLORS["accent_teal"],
+                    text=[f"{sm_actual:,.2f}<br>({sm_ach:.1f}%)" if pd.notna(sm_actual) else "—"], textposition="auto"
                 ))
                 fig_month_bar.update_layout(
-                    barmode="group",
-                    plot_bgcolor=COLORS["white"],
-                    paper_bgcolor=COLORS["white"],
-                    font_color=COLORS["text"],
-                    margin=dict(l=10, r=10, t=10, b=10),
-                    height=310,
+                    barmode="group", plot_bgcolor=COLORS["white"], paper_bgcolor=COLORS["white"], font_color=COLORS["text"],
+                    margin=dict(l=10, r=10, t=10, b=10), height=280,
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10))
                 )
                 st.plotly_chart(fig_month_bar, use_container_width=True, config={'displayModeBar': False})
 
             with col_m_left:
-                st.markdown(f"##### نسب الإنجاز للمنتجات (شهر {selected_single_month})")
+                st.markdown(f"##### Products Achievement ({selected_single_month})")
                 for row_idx in range(2):
                     m_d_cols = st.columns(2)
                     for col_idx in range(2):
@@ -507,21 +572,20 @@ if sheets_dict is not None:
                             with m_d_cols[col_idx]:
                                 st.plotly_chart(create_donut_chart(p_pct, prod_colors[prod], product_name=prod, actual_val=p_a, target_val=p_t), use_container_width=True, config={'displayModeBar': False})
 
-            # بطاقات الملخص الشهري السفلي
             m_b1, m_b2, m_b3, m_b4 = st.columns(4)
-            m_b1.metric("الفارق (Variance)", f"{sm_var:+,.2f}" if pd.notna(sm_var) else "—")
-            m_b2.metric("نسبة تحقيق الشهر", f"{sm_ach:.1f}%" if pd.notna(sm_ach) else "—")
-            m_b3.metric(f"فعلي شهر {selected_single_month}", f"{sm_actual:,.2f}" if pd.notna(sm_actual) else "غير مسجل")
-            m_b4.metric(f"مستهدف شهر {selected_single_month}", f"{sm_target:,.2f}")
+            m_b1.metric(t["variance"], f"{sm_var:+,.2f}" if pd.notna(sm_var) else "—")
+            m_b2.metric(t["ach_rate"], f"{sm_ach:.1f}%" if pd.notna(sm_ach) else "—")
+            m_b3.metric(t["actual"], f"{sm_actual:,.2f}" if pd.notna(sm_actual) else "—")
+            m_b4.metric(t["target"], f"{sm_target:,.2f}")
 
             st.markdown("---")
 
-            # --- 6. تفاصيل المبيعات اليومية من شيت Sales Report ---
-            st.subheader("📅 تحليل المبيعات اليومية (Daily Sales Breakdown)")
+            # --- 6. تفاصيل المبيعات اليومية ---
+            st.subheader(t["daily_analysis"])
             daily_sheets = detect_daily_sales_data(sheets_dict)
 
             if not daily_sheets:
-                st.info("لم يتم العثور على شيت باسم 'Sales Report' في الملف المرفق، أو أن الشيت لا يحتوي على عمود تاريخ صالح.")
+                st.info("No 'Sales Report' sheet with valid dates found.")
             else:
                 chosen_daily_sheet = list(daily_sheets.keys())[0]
                 daily_df, date_col_name = daily_sheets[chosen_daily_sheet]
@@ -529,20 +593,20 @@ if sheets_dict is not None:
                 daily_years = sorted(daily_df["Parsed_Date"].dt.year.unique().tolist())
                 d_col_f1, d_col_f2, d_col_f3 = st.columns(3)
                 with d_col_f1:
-                    d_year = st.selectbox("سنة المبيعات اليومية:", daily_years, index=len(daily_years)-1)
+                    d_year = st.selectbox(t["daily_year"], daily_years, index=len(daily_years)-1)
                 
                 daily_year_df = daily_df[daily_df["Parsed_Date"].dt.year == d_year].copy()
                 daily_year_df["Month_Name"] = daily_year_df["Parsed_Date"].dt.strftime("%b")
                 
                 with d_col_f2:
-                    avail_d_months = ["الكل"] + [m for m in VALID_MONTHS if m in daily_year_df["Month_Name"].unique()]
-                    d_month = st.selectbox("تصفية بشهر معين (يومي):", avail_d_months)
+                    avail_d_months = [t["all"]] + [m for m in VALID_MONTHS if m in daily_year_df["Month_Name"].unique()]
+                    d_month = st.selectbox(t["daily_month"], avail_d_months)
                 
                 numeric_cols = [c for c in daily_year_df.select_dtypes(include=[np.number]).columns if c not in ["Year", "Month", "Parsed_Date"]]
                 with d_col_f3:
-                    val_col = st.selectbox("اختر عمود القيمة / الكمية:", numeric_cols) if numeric_cols else None
+                    val_col = st.selectbox(t["daily_val"], numeric_cols) if numeric_cols else None
 
-                if d_month != "الكل":
+                if d_month != t["all"]:
                     daily_year_df = daily_year_df[daily_year_df["Month_Name"] == d_month]
 
                 if val_col and not daily_year_df.empty:
@@ -555,35 +619,30 @@ if sheets_dict is not None:
                     active_days = len(daily_grouped[daily_grouped[val_col] > 0])
 
                     dk1, dk2, dk3, dk4 = st.columns(4)
-                    dk1.metric("إجمالي المبيعات للفترة", f"{total_d_sales:,.2f}")
-                    dk2.metric("متوسط البيع اليومي", f"{avg_d_sales:,.2f}")
-                    dk3.metric("أعلى يوم مبيعاً", f"{max_d_row['Date_Only']} ({max_d_row[val_col]:,.2f})")
-                    dk4.metric("عدد أيام البيع المسجلة", f"{active_days} يوم")
+                    dk1.metric("Total Sales", f"{total_d_sales:,.2f}")
+                    dk2.metric("Daily Average", f"{avg_d_sales:,.2f}")
+                    dk3.metric("Peak Day", f"{max_d_row['Date_Only']} ({max_d_row[val_col]:,.2f})")
+                    dk4.metric("Active Days", f"{active_days}")
 
                     fig_daily = px.bar(
                         daily_grouped, x="Date_Only", y=val_col,
-                        title=f"المبيعات اليومية ({val_col}) - {d_month} {d_year}",
-                        color_discrete_sequence=[COLORS["teal"]]
+                        title=f"Daily Sales ({val_col}) - {d_month} {d_year}",
+                        color_discrete_sequence=[COLORS["accent_teal"]]
                     )
-                    fig_daily.update_layout(plot_bgcolor=COLORS["white"], paper_bgcolor=COLORS["white"], xaxis_title="التاريخ", yaxis_title=val_col)
+                    fig_daily.update_layout(plot_bgcolor=COLORS["white"], paper_bgcolor=COLORS["white"], xaxis_title="Date", yaxis_title=val_col, height=300)
                     st.plotly_chart(fig_daily, use_container_width=True, config={'displayModeBar': False})
-                    
-                    with st.expander("عرض سجل الحركات اليومية التفصيلي"):
-                        st.dataframe(daily_year_df.drop(columns=["Parsed_Date", "Date_Only"], errors="ignore"), use_container_width=True)
-                else:
-                    st.dataframe(daily_year_df.drop(columns=["Parsed_Date"], errors="ignore"), use_container_width=True)
 
             st.markdown("---")
 
             # --- 7. الجداول التحليلية والتصدير ---
-            st.subheader("📋 الجداول التحليلية المفصلة")
-            tab1, tab2, tab3, tab4 = st.tabs(["التفصيل الشهري العام", f"تفصيل شهر {selected_single_month}", "تفصيل المنتجات", "مقارنة السنوات"])
+            st.subheader(t["tables"])
+            tab1, tab2, tab3, tab4 = st.tabs(["Monthly Summary", f"Month: {selected_single_month}", "Products Breakdown", "Yearly Comparison"])
             with tab1: st.dataframe(m_summary.drop(columns=["Month_Num"]).style.format({"Target": "{:,.2f}", "Actual": "{:,.2f}", "Achievement %": "{:.1f}%"}, na_rep="—"), use_container_width=True)
             with tab2: st.dataframe(single_month_enriched.drop(columns=["Month_Num"]).style.format({"Target": "{:,.2f}", "Actual": "{:,.2f}", "Achievement %": "{:.1f}%"}, na_rep="—"), use_container_width=True)
             with tab3: st.dataframe(summarize_by_period(filtered_df, ["Product", "Quarter"]).style.format({"Target": "{:,.2f}", "Actual": "{:,.2f}", "Achievement %": "{:.1f}%"}, na_rep="—"), use_container_width=True)
             with tab4: st.dataframe(summarize_by_period(clean_df[clean_df["Product"].isin(selected_products)], ["Year"]).style.format({"Target": "{:,.2f}", "Actual": "{:,.2f}", "Achievement %": "{:.1f}%"}, na_rep="—"), use_container_width=True)
 
-            st.markdown("### 📥 تصدير التقارير")
+            st.markdown(f"### {t['export']}")
             export_sheets = {
                 "Monthly_All": m_summary.drop(columns=["Month_Num"]),
                 f"Month_{selected_single_month}": single_month_enriched.drop(columns=["Month_Num"]),
@@ -594,4 +653,4 @@ if sheets_dict is not None:
                 export_sheets["Daily_Sales"] = daily_grouped
 
             excel_bytes = convert_dfs_to_excel(export_sheets)
-            st.download_button("📊 تحميل التقرير الشامل (Excel متعدد الشيتات)", data=excel_bytes, file_name=f"Sales_Analysis_{selected_year}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button(t["download_btn"], data=excel_bytes, file_name=f"Sales_Analysis_{selected_year}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
