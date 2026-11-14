@@ -9,7 +9,7 @@ st.set_page_config(page_title="Advanced Sales Performance Dashboard", page_icon=
 C = {
     "navy": "#102D50", "navy2": "#173B63", "teal": "#0FA69E",
     "orange": "#E99A16", "blue": "#2873D8", "bg": "#F3F7FC",
-    "white": "#FFFFFF", "text": "#142B46", "muted": "#4A5568",
+    "white": "#FFFFFF", "text": "#142B46", "muted": "#334155",
     "border": "#DCE5EF", "red": "#DC3F43", "gray": "#E7EDF4",
 }
 PRODUCTS = ["Min", "Syn", "DEO", "Fluids"]
@@ -90,7 +90,7 @@ def parse_target(raw):
         return None
     header_pos = None
     for pos, (_, row) in enumerate(raw.iterrows()):
-        vals = [str(val).strip() for val in row.values if pd.notna(val)]
+        vals = [str(v).strip() for v in row.values if pd.notna(v)]
         if "Min" in vals and "Syn" in vals:
             header_pos = pos
             break
@@ -165,30 +165,42 @@ def num(v):
 def pct(v):
     return "—" if pd.isna(v) else f"{v:.1f}%"
 
-# دوائر متناسقة وكاملة (دائماً تظهر الدائرة كاملة بشكل احترافي بدون أي قص) مع خط وضح وأنيق بالأسفل للفعلي والمستهدف
+# دوائر متناسقة وكاملة 100% مع زيادة الهوامش لتجنب القص نهائياً ووضوح النص أسفلها
 def donut(actual, target, product):
     valid = pd.notna(actual) and pd.notna(target) and target > 0
     rate = actual / target * 100 if valid else 0
-    # ضبط الحلقة لتكون متناسقة وكاملة دائماً
-    ring = 100 if rate >= 100 else (rate if rate > 0 else 0.001)
-    remainder = max(100 - ring, 0.001) if rate < 100 else 0.001
-    
+    ring = min(max(rate, 0), 100)
     label = f"{rate:.1f}%" if valid else "N/A"
     
     fig = go.Figure(go.Pie(
-        values=[ring, remainder], hole=.72, sort=False,
+        values=[max(ring, .001), max(100-ring, .001)], hole=.70, sort=False,
         marker=dict(colors=[PCOLORS[product], C["gray"]], line=dict(color="white", width=1.5)),
         textinfo="none", hovertemplate=f"{product}<br>{label}<extra></extra>"
     ))
-    fig.add_annotation(x=.5, y=.56, text=f"<b>{product}</b><br><b style='font-size:13.5px'>{label}</b>",
-                       showarrow=False, font=dict(size=10.5, color=C["text"]))
-    # تحسين الخط وتوضيحه تحت الدائرة للفعلي والمستهدف
-    fig.add_annotation(x=.5, y=-0.12, text=f"<b>{num(actual)} / {num(target)}</b>",
-                       showarrow=False, font=dict(size=9.5, color=C["navy"], weight="bold"), xref="paper", yref="paper")
-    fig.update_layout(height=125, showlegend=False, margin=dict(l=2, r=2, t=2, b=16),
-                      paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+    
+    # نسبة الإنجاز واسم المنتج في منتصف الدائرة
+    fig.add_annotation(
+        x=0.5, y=0.52,
+        text=f"<b>{product}</b><br><b style='font-size:13px; color:#102D50;'>{label}</b>",
+        showarrow=False, font=dict(size=10.5, color=C["text"])
+    )
+    
+    # كتابة الفعلي والمستهدف بخط أوضح وأسود غامق أسفل الدائرة تماماً
+    fig.add_annotation(
+        x=0.5, y=-0.25,
+        text=f"<b style='color:#0F172A; font-size:10px;'>الفعلي: {num(actual)}</b><br><b style='color:#475569; font-size:9.5px;'>المستهدف: {num(target)}</b>",
+        showarrow=False, font=dict(size=9.5), xref="paper", yref="paper"
+    )
+    
+    # زيادة الهوامش لمنع قص الدائرة أو النصوص تماماً
+    fig.update_layout(
+        height=145, showlegend=False,
+        margin=dict(l=15, r=15, t=10, b=28),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
+    )
     return fig
 
+# أعمدة إجمالي الفترة (فعلي مقابل مستهدف بدون تقسيم منتجات)
 def total_bar_chart(period_label, actual, target, height=235):
     fig = go.Figure()
     fig.add_bar(
@@ -242,7 +254,7 @@ def render_panel(title, period, data, key, full_width=False):
     d.metric(t["target"], num(target))
     
     if full_width:
-        bar_col, donuts_col = st.columns([1, 2.2], gap="medium")
+        bar_col, donuts_col = st.columns([1, 2.4], gap="medium")
         with bar_col:
             st.caption(f"📊 {t['total_chart']}")
             st.plotly_chart(total_bar_chart(period, actual, target, height=175),
@@ -258,7 +270,7 @@ def render_panel(title, period, data, key, full_width=False):
                         use_container_width=True, config={"displayModeBar": False, "staticPlot": True},
                         key=f"{key}_{product}")
     else:
-        bar_col, donuts_col = st.columns([1, 1.35], gap="small")
+        bar_col, donuts_col = st.columns([1, 1.4], gap="small")
         with bar_col:
             st.caption(f"📊 {t['total_chart']}")
             st.plotly_chart(total_bar_chart(period, actual, target, height=245),
@@ -365,24 +377,24 @@ st.markdown(f'<div class="section-heading">📈 {t["monthly"]} {year}</div>', un
 st.plotly_chart(monthly_chart(month_summary), use_container_width=True, config={"displayModeBar":False})
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# الصف الأول: النصف السنوي والربع السنوي
+# الصف الأول: النصف السنوي والربع السنوي بجانب بعضهما
 half_col, quarter_col = st.columns(2, gap="medium")
 with half_col:
     half = st.selectbox(t["select_half"], ["H1","H2"], index=1, key="half_choice")
     render_panel(t["half"], half, year_data[year_data.Half == half], "half", full_width=False)
 with quarter_col:
-    quarter = st.selectbox(t["select_quarter"], ["Q1","Q2","Q3","Q4"], index=2, key="quarter_choice") # Q3 افتراضياً تطابقاً مع الصورة
+    quarter = st.selectbox(t["select_quarter"], ["Q1","Q2","Q3","Q4"], index=2, key="quarter_choice")
     render_panel(t["quarter"], quarter, year_data[year_data.Quarter == quarter], "quarter", full_width=False)
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
 # الصف الثاني: تحليل الشهر في خانة مستقلة بعرض كامل
-month = st.selectbox(t["select_month"], MONTHS, index=10, key="month_choice") # Nov افتراضياً
+month = st.selectbox(t["select_month"], MONTHS, index=10, key="month_choice")
 render_panel(t["month"], month, year_data[year_data.Month == month], "month", full_width=True)
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# Daily sales
+# Daily sales, if a dated Sales Report sheet exists.
 st.markdown(f'<div class="section-heading">📅 {t["daily"]}</div>', unsafe_allow_html=True)
 daily = daily_data(sheets)
 if daily is not None and not daily.empty:
