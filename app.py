@@ -1,9 +1,11 @@
 import io
+import json
 from datetime import timedelta
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
 
 # =========================================================
 # 1. PAGE CONFIGURATION
@@ -1115,6 +1117,114 @@ st.markdown(f"""
 
 
 # =========================================================
+# 15b. DOWNLOAD DASHBOARD AS IMAGE (PNG)
+# =========================================================
+# يلتقط اللوحة كاملة من المتصفح (client-side) ويحملها كصورة PNG
+# بحالتها الحالية (الشهر/الربع/النصف المختار).
+
+IMAGE_EXPORT_HTML = """
+<style>
+  html, body { margin:0; padding:0; background:transparent; }
+  button {
+    width:100%; height:46px; border:0; border-radius:11px; cursor:pointer;
+    background:linear-gradient(100deg,#0E9F8E,#0B7F73); color:#fff;
+    font-family:Tahoma, Arial, sans-serif; font-size:15px; font-weight:700;
+    box-shadow:0 3px 10px rgba(14,159,142,.35);
+  }
+  button:disabled { opacity:.7; cursor:wait; }
+</style>
+<button id="dl"></button>
+<script>
+(function () {
+  var LABEL = __LABEL__, BUSY = __BUSY__, DONE = __DONE__, FAIL = __FAIL__, FILE = __FILE__;
+  var SRCS = [
+    "https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.min.js",
+    "https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js",
+    "https://unpkg.com/html-to-image@1.11.11/dist/html-to-image.js"
+  ];
+  var btn = document.getElementById("dl");
+  btn.textContent = LABEL;
+  var P = window.parent, pd = P.document;
+
+  function loadLib(i) {
+    return new Promise(function (resolve, reject) {
+      if (P.htmlToImage) { resolve(); return; }
+      if (i >= SRCS.length) { reject(new Error("library")); return; }
+      var s = pd.createElement("script");
+      s.src = SRCS[i];
+      s.onload = function () { P.htmlToImage ? resolve() : loadLib(i + 1).then(resolve, reject); };
+      s.onerror = function () { loadLib(i + 1).then(resolve, reject); };
+      pd.head.appendChild(s);
+    });
+  }
+
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  btn.addEventListener("click", async function () {
+    btn.disabled = true;
+    btn.textContent = BUSY;
+    var holder = window.frameElement && window.frameElement.closest(
+      '[data-testid="stElementContainer"], .element-container'
+    );
+    var oldDisplay = holder ? holder.style.display : "";
+    try {
+      await loadLib(0);
+      var node = pd.querySelector('[data-testid="stMainBlockContainer"]') ||
+                 pd.querySelector(".block-container");
+      if (!node) { throw new Error("node"); }
+      if (holder) { holder.style.display = "none"; }
+      await sleep(300);
+      var w = node.scrollWidth, h = node.scrollHeight;
+      var opts = {
+        backgroundColor: "#F1F5F9",
+        pixelRatio: Math.min(2, 12000 / h),
+        cacheBust: true,
+        width: w,
+        height: h,
+        filter: function (n) { return !(n.tagName === "IFRAME"); }
+      };
+      var blob;
+      try {
+        blob = await P.htmlToImage.toBlob(node, opts);
+      } catch (e1) {
+        opts.skipFonts = true;
+        blob = await P.htmlToImage.toBlob(node, opts);
+      }
+      if (!blob) { throw new Error("blob"); }
+      var url = P.URL.createObjectURL(blob);
+      var a = pd.createElement("a");
+      a.href = url; a.download = FILE;
+      pd.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { P.URL.revokeObjectURL(url); }, 5000);
+      btn.textContent = DONE;
+    } catch (err) {
+      btn.textContent = FAIL;
+    } finally {
+      if (holder) { holder.style.display = oldDisplay; }
+      setTimeout(function () { btn.textContent = LABEL; btn.disabled = false; }, 2800);
+    }
+  });
+})();
+</script>
+"""
+
+_export_labels = {
+    "ar": ("📸 تحميل اللوحة كاملة (صورة PNG)", "⏳ جارٍ إنشاء الصورة...", "✅ تم تحميل الصورة", "⚠️ تعذّر إنشاء الصورة"),
+    "en": ("📸 Download full dashboard (PNG)", "⏳ Creating image...", "✅ Image downloaded", "⚠️ Could not create image"),
+}[lang]
+
+components.html(
+    IMAGE_EXPORT_HTML
+    .replace("__LABEL__", json.dumps(_export_labels[0]))
+    .replace("__BUSY__", json.dumps(_export_labels[1]))
+    .replace("__DONE__", json.dumps(_export_labels[2]))
+    .replace("__FAIL__", json.dumps(_export_labels[3]))
+    .replace("__FILE__", json.dumps(f"Sales_Dashboard_{year}.png")),
+    height=54,
+)
+
+
+# =========================================================
 # 16. TARGET DATA FILTERING
 # =========================================================
 
@@ -1160,7 +1270,7 @@ st.markdown(f'<div class="section-heading">📈 {t["monthly"]} {year}</div>', un
 st.plotly_chart(
     monthly_chart(month_summary, [m for m in month_summary.Month if m in HOLIDAY_MONTHS]),
     use_container_width=True,
-    config={"displayModeBar": False}
+    config={"displayModeBar": False, "staticPlot": True}  # رسم ثابت وغير تفاعلي
 )
 st.markdown(
     f'<div class="pct-legend">'
