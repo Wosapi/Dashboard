@@ -210,20 +210,24 @@ def plot_monthly_target_vs_actual(monthly_df):
     fig.update_layout(barmode="group", plot_bgcolor=COLORS["white"], paper_bgcolor=COLORS["white"], font_color=COLORS["text"], margin=dict(l=20, r=20, t=40, b=20), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
     return fig
 
-def create_donut_chart(percentage, color, product_name=""):
+def create_donut_chart(percentage, color, product_name="", actual_val=None, target_val=None):
     display_val = min(max(percentage, 0), 100) if (percentage is not None and not pd.isna(percentage)) else 0
     pct_text = f"{percentage:.1f}%" if (percentage is not None and not pd.isna(percentage)) else "N/A"
     
-    center_text = f"<b>{product_name}</b><br>{pct_text}" if product_name else f"<b>{pct_text}</b>"
+    act_str = f"{actual_val:,.2f}" if (actual_val is not None and not pd.isna(actual_val)) else "0.00"
+    tgt_str = f"{target_val:,.2f}" if (target_val is not None and not pd.isna(target_val)) else "0.00"
     
-    fig = go.Figure(data=[go.Pie(values=[display_val, 100 - display_val], hole=0.75, marker_colors=[color, "#E2E8F0"], textinfo="none", hoverinfo="none", sort=False)])
+    # دمج اسم المنتج، النسبة المئوية، الفعلي، والمستهدف داخل الدائرة بشكل مرتب واحترافي
+    center_text = f"<b>{product_name}</b><br><span style='font-size:16px; color:#142B4A;'><b>{pct_text}</b></span><br><span style='font-size:9px; color:#555;'>الفعلي: {act_str}<br>المستهدف: {tgt_str}</span>" if product_name else f"<b>{pct_text}</b>"
+    
+    fig = go.Figure(data=[go.Pie(values=[display_val, 100 - display_val], hole=0.7, marker_colors=[color, "#E2E8F0"], textinfo="none", hoverinfo="none", sort=False)])
     fig.update_layout(
         showlegend=False, 
-        annotations=[dict(text=center_text, x=0.5, y=0.5, font_size=14, font_weight="bold", font_color=COLORS["text"], showarrow=False)], 
+        annotations=[dict(text=center_text, x=0.5, y=0.5, font_size=12, font_color=COLORS["text"], showarrow=False)], 
         plot_bgcolor="rgba(0,0,0,0)", 
         paper_bgcolor="rgba(0,0,0,0)", 
         margin=dict(l=5, r=5, t=5, b=5), 
-        height=170
+        height=190
     )
     return fig
 
@@ -293,7 +297,7 @@ if sheets_dict is not None:
             st.subheader(f"📈 نظرة عامة على الأداء الشهري لعام {selected_year}")
             st.plotly_chart(plot_monthly_target_vs_actual(m_summary), use_container_width=True, config={'displayModeBar': False})
 
-            # --- 3. نسب تحقيق المستهدف حسب المنتج والتحليل الربعي (الشبكة المربعة 2×2 للدوائر) ---
+            # --- 3. نسب تحقيق المستهدف حسب المنتج والتحليل الربعي (الشبكة المربعة 2×2 مع البيانات داخل الدائرة) ---
             st.markdown("### 🎯 نسب تحقيق المستهدف حسب المنتج والتحليل الربعي")
             
             prod_colors = {
@@ -323,19 +327,11 @@ if sheets_dict is not None:
                             p_pct = (p_actual / p_target * 100) if (pd.notna(p_actual) and p_target > 0) else np.nan
 
                             with d_cols[col_idx]:
-                                st.plotly_chart(create_donut_chart(p_pct, prod_colors[prod], product_name=prod), use_container_width=True, config={'displayModeBar': False})
-                                a_str = f"{p_actual:,.2f}" if pd.notna(p_actual) else "0.00"
-                                st.markdown(f"<div style='text-align: center; margin-top: -10px; margin-bottom: 10px;'><span style='font-size:11px; color:#555;'>الفعلي: {a_str} | المستهدف: {p_target:,.2f}</span></div>", unsafe_allow_html=True)
+                                st.plotly_chart(create_donut_chart(p_pct, prod_colors[prod], product_name=prod, actual_val=p_actual, target_val=p_target), use_container_width=True, config={'displayModeBar': False})
 
             with col_right:
                 st.markdown("##### 🗓️ التحليل الربعي للأعمدة")
                 q_summary = summarize_by_period(filtered_df, ["Quarter"])
-                
-                # إعداد النصوص داخل الأعمدة (الفعلي، المستهدف، والنسبة المئوية)
-                q_summary["Text_Label"] = q_summary.apply(
-                    lambda r: f"الفعلي: {r['Actual']:,.2f}<br>المستهدف: {r['Target']:,.2f}<br>({r['Achievement %']:.1f}%)" 
-                    if pd.notna(r["Actual"]) and r["Target"] > 0 else f"المستهدف: {r['Target']:,.2f}", axis=1
-                )
 
                 fig_q = go.Figure()
                 fig_q.add_trace(go.Bar(
@@ -355,14 +351,14 @@ if sheets_dict is not None:
                     paper_bgcolor=COLORS["white"],
                     font_color=COLORS["text"],
                     margin=dict(l=10, r=10, t=10, b=10),
-                    height=380,
+                    height=390,
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10))
                 )
                 st.plotly_chart(fig_q, use_container_width=True, config={'displayModeBar': False})
 
             st.markdown("---")
 
-            # --- 4. تفاصيل المبيعات الشهرية عبر بطاقات دائرية شبكية للشهر المحدد (مطابقة لما صممناه أعلاه 2×2) ---
+            # --- 4. تفاصيل المبيعات الشهرية عبر بطاقات دائرية شبكية للشهر المحدد (مطابقة تماماً للقسم العلوي) ---
             st.subheader(f"🔍 مقارنة منتجات الشهر المفصل (بطاقات نسب الإنجاز) - {selected_year}")
             selected_single_month = st.selectbox("اختر الشهر لعرض دوائر نسب تحقيقه الكاملة:", VALID_MONTHS, index=0)
             
@@ -386,7 +382,7 @@ if sheets_dict is not None:
 
             st.markdown(f"**نسب تحقيق المنتجات لشهر {selected_single_month}:**")
             
-            # تطبيق نفس تصميم الشبكة المربعة (2 × 2) للقسم السفلي مع اسم المنتج داخل الدائرة
+            # تطبيق شبكة مربعة (2 × 2) مع إدخال الفعلي والمستهدف والاسم داخل الدائرة للشهر المفصل
             for row_idx in range(2):
                 m_d_cols = st.columns(2)
                 for col_idx in range(2):
@@ -399,9 +395,7 @@ if sheets_dict is not None:
                         p_a = p_row["Actual"].values[0] if not p_row.empty else np.nan
                         
                         with m_d_cols[col_idx]:
-                            st.plotly_chart(create_donut_chart(p_pct, prod_colors[prod], product_name=prod), use_container_width=True, config={'displayModeBar': False})
-                            p_a_str = f"{p_a:,.2f}" if pd.notna(p_a) else "0.00"
-                            st.markdown(f"<div style='text-align: center; margin-top: -10px; margin-bottom: 10px;'><span style='font-size:11px; color:#555;'>الفعلي: {p_a_str} | المستهدف: {p_t:,.2f}</span></div>", unsafe_allow_html=True)
+                            st.plotly_chart(create_donut_chart(p_pct, prod_colors[prod], product_name=prod, actual_val=p_a, target_val=p_t), use_container_width=True, config={'displayModeBar': False})
 
             st.markdown("---")
 
