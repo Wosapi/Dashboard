@@ -59,7 +59,7 @@ TEXT = {
         "total_amount": "مبلغ المبيعات (SAR)",
         "period_display": "📅 الفترة النشطة:",
         "all": "الكل",
-        "na": "غير متاح",
+        "na": "غير متاحة",
     },
     "en": {
         "title": "Advanced Sales Performance Dashboard",
@@ -384,18 +384,43 @@ def render_panel(title, period, data, key, icon="📊", full_width=False):
                             key=f"{key}_{product}"
                         )
 
-def parse_excel_date(series):
-    """دالة ذكية لتحويل تواريخ Excel (سواء كانت نصوص أو أرقام تسلسلية) إلى تواريخ حقيقية بدقة"""
-    parsed = pd.to_datetime(series, errors="coerce")
-    numeric_vals = pd.to_numeric(series, errors="coerce")
-    if parsed.notna().sum() < len(series) * 0.1 and numeric_vals.notna().sum() > 0:
-        converted = pd.to_datetime(numeric_vals, unit="D", origin="1899-12-30", errors="coerce")
-        if converted.notna().sum() > parsed.notna().sum():
-            parsed = converted
+def parse_excel_date(series, target_year=2026):
+    """دالة قراءة وتصحيح التواريخ (مثل 13-Jun) وربطها بسنة الكشف المختارة مباشرة"""
+    s_str = series.astype(str).str.strip()
+    
+    # 1. محاولة قراءة صيغة اليوم والشهر النصية (مثل 13-Jun)
+    parsed_dm = pd.to_datetime(s_str, format='%d-%b', errors='coerce')
+    valid_dm = parsed_dm.notna()
+    
+    if valid_dm.any():
+        # تعيين السنة المختارة في اللوحة لتلك التواريخ
+        fixed_dates = parsed_dm.apply(lambda dt: dt.replace(year=int(target_year)) if pd.notna(dt) else pd.NaT)
+        parsed = fixed_dates
+    else:
+        parsed = pd.Series(pd.NaT, index=series.index)
+        
+    # 2. إذا وجد محتوى آخر أو تواريخ قياسية أو أرقام تسلسلية
+    remaining_mask = parsed.isna()
+    if remaining_mask.any():
+        sub_series = series[remaining_mask]
+        parsed_std = pd.to_datetime(sub_series, errors="coerce", dayfirst=True)
+        numeric_vals = pd.to_numeric(sub_series, errors="coerce")
+        valid_serials = numeric_vals.notna() & (numeric_vals > 30000)
+        if valid_serials.sum() > parsed_std.notna().sum():
+            converted = pd.to_datetime(numeric_vals, unit="D", origin="1899-12-30", errors="coerce")
+            parsed_std = parsed_std.fillna(converted)
+            
+        # تصحيح السنوات إذا كانت قديمة أو خاطئة (أقل من 2020)
+        fix_years = parsed_std.notna() & (parsed_std.dt.year < 2020)
+        if fix_years.any():
+            parsed_std = parsed_std.apply(lambda dt: dt.replace(year=int(target_year)) if pd.notna(dt) and dt.year < 2020 else dt)
+            
+        parsed.update(parsed_std)
+        
     return parsed
 
-def daily_data_from_sheet(sheets):
-    """سحب البيانات من شيت Data بالاعتماد على الأعمدة المطلوبة: D (مبلغ المبيعات), I (إجمالي المبيعات), J (التاريخ), F (أرقام العملاء)"""
+def daily_data_from_sheet(sheets, active_year):
+    """سحب البيانات من شيت Data وتصحيح التواريخ بناءً على أعمدة J (التاريخ), D (مبلغ المبيعات), I (إجمالي المبيعات), F (العملاء)"""
     name = next((n for n in sheets if n.strip().lower() == "data"), None)
     if not name:
         return None
@@ -404,7 +429,7 @@ def daily_data_from_sheet(sheets):
         return None
     
     res = pd.DataFrame()
-    res["Parsed_Date"] = parse_excel_date(df.iloc[:, 9]) # العمود J (التاريخ)
+    res["Parsed_Date"] = parse_excel_date(df.iloc[:, 9], target_year=active_year) # العمود J (التاريخ)
     res["Amount"] = pd.to_numeric(df.iloc[:, 3], errors="coerce")       # العمود D (مبلغ المبيعات)
     res["Total_I"] = pd.to_numeric(df.iloc[:, 8], errors="coerce")     # العمود I (إجمالي المبيعات)
     res["Customer"] = df.iloc[:, 5]                                    # العمود F (أرقام العملاء)
@@ -506,18 +531,18 @@ with month_col:
 
 with daily_col:
     st.markdown(f'<div class="panel-heading">📋 {t["daily"]}</div>', unsafe_allow_html=True)
-    daily_df = daily_data_from_sheet(sheets)
+    daily_df = daily_data_from_sheet(sheets, active_year=year)
     if daily_df is not None and not daily_df.empty:
-        dy_filtered = daily_df[daily_df.Parsed_Date.dt.year == year].copy()
+        dy_filtered = daily_df[daily_df.Parsed_Date.dt.year == int(year)].copy()
         if dy_filtered.empty:
-            dy_filtered = daily_df.copy()  # Fallback لتجنب الفراغ إذا كانت السنة مختلفة في شيت Data
+            dy_filtered = daily_df.copy()  # Fallback
             
         if not dy_filtered.empty:
             dy_filtered["Date_Only"] = dy_filtered.Parsed_Date.dt.date
             min_d = dy_filtered["Date_Only"].min()
             max_d = dy_filtered["Date_Only"].max()
             
-            # عرض الفترة النشطة بوضوح تام فوق الجدول
+            # عرض الفترة النشطة الصحيحة بوضوح تام فوق الجدول
             if pd.notna(min_d) and pd.notna(max_d):
                 st.markdown(f'<div class="period-badge">{t["period_display"]} من {min_d} إلى {max_d}</div>', unsafe_allow_html=True)
             
@@ -530,7 +555,7 @@ with daily_col:
             
             if filter_mode == "تاريخ محدد":
                 selected_date = st.date_input(
-                    "اختر اليوم المطلوبة:" if lang == "ar" else "Select Date:",
+                    "اختر اليوم المطلوب:" if lang == "ar" else "Select Date:",
                     value=max_d if pd.notna(max_d) else None,
                     min_value=min_d if pd.notna(min_d) else None,
                     max_value=max_d if pd.notna(max_d) else None,
