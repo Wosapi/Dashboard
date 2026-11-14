@@ -53,8 +53,8 @@ TEXT = {
         "select_half": "📆 اختر النصف",
         "select_quarter": "🗓️ اختر الربع",
         "select_month": "📅 اختر الشهر",
-        "daily_year": "📅 سنة المبيعات اليومية",
-        "daily_month": "🗓️ شهر المبيعات اليومية",
+        "daily_month": "🗓️ شهر المبيعات",
+        "search_day": "🔍 ابحث عن اليوم",
         "sales_count": "عدد المبيعات",
         "invoice_count": "عدد الفواتير",
         "total_amount": "إجمالي المبلغ (SAR)",
@@ -91,8 +91,8 @@ TEXT = {
         "select_half": "📆 Select half-year",
         "select_quarter": "🗓️ Select quarter",
         "select_month": "📅 Select month",
-        "daily_year": "📅 Daily Sales Year",
-        "daily_month": "🗓️ Daily Sales Month",
+        "daily_month": "🗓️ Sales Month",
+        "search_day": "🔍 Search Day",
         "sales_count": "Sales Count",
         "invoice_count": "Invoice Count",
         "total_amount": "Total Amount (SAR)",
@@ -380,7 +380,6 @@ def render_panel(title, period, data, key, icon="📊", full_width=False):
                         )
 
 def daily_data_from_sheet(sheets):
-    """سحب البيانات من شيت Data بالاعتماد على العمود D (مبلغ المبيعات) و I, J (التواريخ والفواتير)"""
     name = next((n for n in sheets if n.strip().lower() == "data"), None)
     if not name:
         return None
@@ -494,7 +493,7 @@ with quarter_col:
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# الصف الثاني: تحليل الشهر بجانب جدول تحليل المبيعات اليومية من شيت Data
+# الصف الثاني: تحليل الشهر بجانب جدول تحليل المبيعات اليومية من شيت Data (تلقائياً لنفس سنة الكشف بدون فلتر سنة منفصل، مع إمكانية اختيار الشهر والبحث عن يوم محدد)
 month_col, daily_col = st.columns(2, gap="medium")
 
 with month_col:
@@ -505,40 +504,53 @@ with daily_col:
     st.markdown(f'<div class="panel-heading">📋 {t["daily"]}</div>', unsafe_allow_html=True)
     daily_df = daily_data_from_sheet(sheets)
     if daily_df is not None and not daily_df.empty:
-        daily_years = sorted(daily_df.Parsed_Date.dt.year.dropna().unique().tolist())
+        # ربط بيانات المبيعات اليومية بسنة الكشف المختارة في الأعلى تلقائياً وحذف اختيار السنة
+        dy_filtered = daily_df[daily_df.Parsed_Date.dt.year == year].copy()
+        dy_filtered["Month_Name"] = dy_filtered.Parsed_Date.dt.strftime("%b")
+        
         d1, d2 = st.columns(2)
         with d1:
-            dy = st.selectbox(t["daily_year"], daily_years, index=len(daily_years) - 1, key="daily_year_select")
-        dy_filtered = daily_df[daily_df.Parsed_Date.dt.year == dy].copy()
-        dy_filtered["Month_Name"] = dy_filtered.Parsed_Date.dt.strftime("%b")
-        with d2:
-            available = [m for m in MONTHS if m in dy_filtered.Month_Name.unique()]
-            dm = st.selectbox(t["daily_month"], [t["all"]] + available, key="daily_month_select")
+            available_months = [m for m in MONTHS if m in dy_filtered.Month_Name.unique()]
+            dm = st.selectbox(t["daily_month"], [t["all"]] + available_months, key="daily_month_select")
             
         if dm != t["all"]:
             dy_filtered = dy_filtered[dy_filtered.Month_Name == dm]
             
         if not dy_filtered.empty:
             dy_filtered["Date_Only"] = dy_filtered.Parsed_Date.dt.date
-            # تجميع البيانات: عدد المبيعات، عدد الفواتير الفريدة، وإجمالي المبلغ لكل يوم
-            grouped_daily = dy_filtered.groupby("Date_Only", as_index=False).agg(
-                Sales_Count=("Amount", "count"),
-                Invoice_Count=("Invoice", "nunique"),
-                Total_Amount=("Amount", "sum")
-            ).sort_values("Date_Only", ascending=False)
             
-            # عرض جدول المبيعات اليومية بشكل مرتب واحترافي
-            st.dataframe(
-                grouped_daily.rename(columns={
-                    "Date_Only": "التاريخ",
-                    "Sales_Count": t["sales_count"],
-                    "Invoice_Count": t["invoice_count"],
-                    "Total_Amount": t["total_amount"]
-                }).style.format({"Total_Amount": "{:,.2f}"}),
-                use_container_width=True,
-                hide_index=True,
-                height=265
-            )
+            # خيار البحث عن يوم محدد
+            all_dates = sorted(dy_filtered["Date_Only"].unique().tolist(), reverse=True)
+            date_options = [t["all"]] + [str(d) for d in all_dates]
+            
+            with d2:
+                selected_day = st.selectbox(t["search_day"], date_options, key="daily_search_day")
+                
+            if selected_day != t["all"]:
+                dy_filtered = dy_filtered[dy_filtered["Date_Only"].astype(str) == selected_day]
+            
+            if not dy_filtered.empty:
+                # تجميع البيانات لكل يوم
+                grouped_daily = dy_filtered.groupby("Date_Only", as_index=False).agg(
+                    Sales_Count=("Amount", "count"),
+                    Invoice_Count=("Invoice", "nunique"),
+                    Total_Amount=("Amount", "sum")
+                ).sort_values("Date_Only", ascending=False)
+                
+                # عرض جدول المبيعات اليومية
+                st.dataframe(
+                    grouped_daily.rename(columns={
+                        "Date_Only": "التاريخ",
+                        "Sales_Count": t["sales_count"],
+                        "Invoice_Count": t["invoice_count"],
+                        "Total_Amount": t["total_amount"]
+                    }).style.format({"Total_Amount": "{:,.2f}"}),
+                    use_container_width=True,
+                    hide_index=True,
+                    height=245
+                )
+            else:
+                st.info(t["no_data"])
         else:
             st.info(t["no_data"])
     else:
