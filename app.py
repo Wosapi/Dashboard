@@ -179,8 +179,24 @@ def donut(actual, target, product):
                        showarrow=False, font=dict(size=11, color=C["text"]))
     fig.add_annotation(x=.5, y=-.04, text=f"{num(actual)} / {num(target)}",
                        showarrow=False, font=dict(size=9, color=C["muted"]), xref="paper", yref="paper")
-    fig.update_layout(height=142, showlegend=False, margin=dict(l=2,r=2,t=2,b=7),
+    fig.update_layout(height=130, showlegend=False, margin=dict(l=2,r=2,t=2,b=7),
                       paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+    return fig
+
+def sub_bar_chart(sub_df, group_col):
+    agg = summary(sub_df, [group_col])
+    if agg.empty:
+        return go.Figure()
+    fig = go.Figure()
+    fig.add_bar(x=agg[group_col], y=agg["Target"], name=t["target"], marker_color=C["navy"],
+                text=agg["Target"].map(lambda v: f"{v:.1f}" if pd.notna(v) else ""), textposition="auto",
+                textfont=dict(color="white", size=9))
+    fig.add_bar(x=agg[group_col], y=agg["Actual"], name=t["actual"], marker_color=C["teal"],
+                text=agg.apply(lambda r: f"{r['Actual']:.1f}<br>({r['Achievement %']:.0f}%)" if pd.notna(r['Actual']) else "—", axis=1),
+                textposition="auto", textfont=dict(color="white", size=9))
+    fig.update_layout(barmode="group", height=210, margin=dict(l=5,r=5,t=5,b=5),
+        plot_bgcolor="white", paper_bgcolor="white", font=dict(color=C["text"], size=10),
+        showlegend=False, xaxis=dict(showgrid=False), yaxis=dict(rangemode="tozero", gridcolor=C["gray"]))
     return fig
 
 def monthly_chart(month_df):
@@ -199,7 +215,7 @@ def monthly_chart(month_df):
         bargap=.22, bargroupgap=.08)
     return fig
 
-def render_panel(title, period, data, key, full_width=False):
+def render_panel(title, period, data, key, group_col, full_width=False):
     st.markdown(f'<div class="panel-heading">📊 {title} ({period})</div>', unsafe_allow_html=True)
     if data.empty:
         st.info(t["no_data"])
@@ -214,27 +230,33 @@ def render_panel(title, period, data, key, full_width=False):
     c.metric(t["actual"], num(actual))
     d.metric(t["target"], num(target))
     
-    st.caption(f"🎯 {t['product_perf']} · {period}")
-    
-    if full_width:
-        # عرض الدوائر الأربعة في سطر أفقي واحد عند وضع الخانة في صف مستقل
-        cols = st.columns(4)
-        for col, product in zip(cols, PRODUCTS):
-            subset = data[data.Product == product]
-            with col:
-                st.plotly_chart(donut(total(subset.Actual), total(subset.Target), product),
-                    use_container_width=True, config={"displayModeBar": False, "staticPlot": True},
-                    key=f"{key}_{product}")
-    else:
-        # عرض شبكي 2x2 عند وجود خانتين متجاورتين
-        for products_row in (PRODUCTS[:2], PRODUCTS[2:]):
-            cols = st.columns(2)
-            for col, product in zip(cols, products_row):
+    # إضافة الرسم البياني للأعمدة للمقارنة بجانب دوائر المنتجات
+    col_chart, col_donuts = st.columns([1, 1.3])
+    with col_chart:
+        st.markdown(f"<p style='font-weight:bold; margin: 4px 0; font-size:12px;'>مقارنة الأداء ({period})</p>", unsafe_allow_html=True)
+        st.plotly_chart(sub_bar_chart(data, group_col), use_container_width=True, config={"displayModeBar": False, "staticPlot": True}, key=f"bar_{key}")
+        
+    with col_donuts:
+        st.markdown(f"<p style='font-weight:bold; margin: 4px 0; font-size:12px;'>{t['product_perf']}</p>", unsafe_allow_html=True)
+        if full_width:
+            d_cols = st.columns(4)
+            for col, product in zip(d_cols, PRODUCTS):
                 subset = data[data.Product == product]
                 with col:
                     st.plotly_chart(donut(total(subset.Actual), total(subset.Target), product),
                         use_container_width=True, config={"displayModeBar": False, "staticPlot": True},
                         key=f"{key}_{product}")
+        else:
+            for products_row in (PRODUCTS[:2], PRODUCTS[2:]):
+                d_cols = st.columns(2)
+                for col, product in zip(d_cols, products_row):
+                    subset = data[data.Product == product]
+                    with col:
+                        st.plotly_chart(donut(total(subset.Actual), total(subset.Target), product),
+                            use_container_width=True, config={"displayModeBar": False, "staticPlot": True},
+                            key=f"{key}_{product}")
+
+    st.markdown("<hr style='margin:5px 0 12px'>", unsafe_allow_html=True)
 
 def daily_data(sheets):
     name = next((n for n in sheets if n.strip().lower() == "sales report"), None)
@@ -326,20 +348,23 @@ st.markdown(f'<div class="section-heading">📈 {t["monthly"]} {year}</div>', un
 st.plotly_chart(monthly_chart(month_summary), use_container_width=True, config={"displayModeBar":False})
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# الصف الأول: النصف السنوي والربع السنوي بجانب بعضهما
+# الصف الأول: النصف السنوي والربع السنوي مع الأعمدة والدوائر
 half_col, quarter_col = st.columns(2, gap="medium")
 with half_col:
     half = st.selectbox(t["select_half"], ["H1","H2"], index=1, key="half_choice")
-    render_panel(t["half"], half, year_data[year_data.Half == half], "half", full_width=False)
+    sub_df_h = year_data[year_data.Half == half]
+    render_panel(t["half"], half, sub_df_h, "half", group_col="Quarter", full_width=False)
 with quarter_col:
-    quarter = st.selectbox(t["select_quarter"], ["Q1","Q2","Q3","Q4"], index=3, key="quarter_choice")
-    render_panel(t["quarter"], quarter, year_data[year_data.Quarter == quarter], "quarter", full_width=False)
+    quarter = st.selectbox(t["select_quarter"], ["Q1","Q2","Q3","Q4"], index=2, key="quarter_choice")
+    sub_df_q = year_data[year_data.Quarter == quarter]
+    render_panel(t["quarter"], quarter, sub_df_q, "quarter", group_col="Product", full_width=False)
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# الصف الثاني: تحليل الشهر في خانة مستقلة بعرض كامل
+# الصف الثاني: تحليل الشهر مع الأعمدة والدوائر بعرض كامل
 month = st.selectbox(t["select_month"], MONTHS, index=10, key="month_choice")
-render_panel(t["month"], month, year_data[year_data.Month == month], "month", full_width=True)
+sub_df_m = year_data[year_data.Month == month]
+render_panel(t["month"], month, sub_df_m, "month", group_col="Product", full_width=True)
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
