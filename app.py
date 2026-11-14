@@ -63,7 +63,7 @@ div[data-testid="stMetricValue"] {{color:{C['navy']};font-weight:750;font-size:c
 .dashboard-header p {{color:#D6E4F1;margin:4px 0 0;font-size:.9rem;}}
 .year-pill {{color:white;font-weight:750;white-space:nowrap;padding:8px 12px;border:1px solid #ffffff38;border-radius:10px;background:#ffffff12;}}
 .section-heading {{background:linear-gradient(100deg,{C['navy']},{C['navy2']});color:white;padding:10px 14px;border-radius:11px;margin:4px 0 10px;font-size:1rem;font-weight:750;}}
-.panel-heading {{background:linear-gradient(100deg,{C['navy']},{C['navy2']});color:white;padding:11px 12px;border-radius:10px;margin:3px 0 10px;font-weight:750;min-height:52px;}}
+.panel-heading {{background:linear-gradient(100deg,{C['navy']},{C['navy2']});color:white;padding:11px 12px;border-radius:10px;margin:3px 0 10px;font-weight:750;min-height:48px;}}
 hr {{border:0;border-top:1px solid {C['border']};margin:1rem 0;}}
 @media(max-width:700px) {{.block-container{{padding:.6rem .55rem 1.5rem;}} .dashboard-header{{padding:13px;}}}}
 </style>
@@ -72,12 +72,6 @@ hr {{border:0;border-top:1px solid {C['border']};margin:1rem 0;}}
 lang_choice = st.sidebar.selectbox("🌍 Language / اللغة", ["العربية", "English"], index=0)
 lang = "ar" if lang_choice == "العربية" else "en"
 t = TEXT[lang]
-
-st.markdown(f"""
-<div class="dashboard-header">
- <div><h1>📊 {t['title']}</h1><p>{t['subtitle']} · Advanced Sales Performance Dashboard</p></div>
- <div class="year-pill">📅 2026</div>
-</div>""", unsafe_allow_html=True)
 
 @st.cache_data(show_spinner=False)
 def load_sheets(file_bytes, filename):
@@ -205,29 +199,42 @@ def monthly_chart(month_df):
         bargap=.22, bargroupgap=.08)
     return fig
 
-def render_panel(title, period, data, key):
+def render_panel(title, period, data, key, full_width=False):
     st.markdown(f'<div class="panel-heading">📊 {title} ({period})</div>', unsafe_allow_html=True)
     if data.empty:
         st.info(t["no_data"])
         return
     target, actual = total(data.Target), total(data.Actual)
-    variance = actual-target if pd.notna(actual) and pd.notna(target) else np.nan
-    rate = actual/target*100 if pd.notna(actual) and pd.notna(target) and target > 0 else np.nan
-    a,b,c,d = st.columns(4)
+    variance = actual - target if pd.notna(actual) and pd.notna(target) else np.nan
+    rate = actual / target * 100 if pd.notna(actual) and pd.notna(target) and target > 0 else np.nan
+    
+    a, b, c, d = st.columns(4)
     a.metric(t["variance"], num(variance))
     b.metric(t["achievement"], pct(rate))
     c.metric(t["actual"], num(actual))
     d.metric(t["target"], num(target))
+    
     st.caption(f"🎯 {t['product_perf']} · {period}")
-    for products_row in (PRODUCTS[:2], PRODUCTS[2:]):
-        cols = st.columns(2)
-        for col, product in zip(cols, products_row):
+    
+    if full_width:
+        # عرض الدوائر الأربعة في سطر أفقي واحد عند وضع الخانة في صف مستقل
+        cols = st.columns(4)
+        for col, product in zip(cols, PRODUCTS):
             subset = data[data.Product == product]
             with col:
                 st.plotly_chart(donut(total(subset.Actual), total(subset.Target), product),
                     use_container_width=True, config={"displayModeBar": False, "staticPlot": True},
                     key=f"{key}_{product}")
-    st.markdown("<hr style='margin:5px 0 12px'>", unsafe_allow_html=True)
+    else:
+        # عرض شبكي 2x2 عند وجود خانتين متجاورتين
+        for products_row in (PRODUCTS[:2], PRODUCTS[2:]):
+            cols = st.columns(2)
+            for col, product in zip(cols, products_row):
+                subset = data[data.Product == product]
+                with col:
+                    st.plotly_chart(donut(total(subset.Actual), total(subset.Target), product),
+                        use_container_width=True, config={"displayModeBar": False, "staticPlot": True},
+                        key=f"{key}_{product}")
 
 def daily_data(sheets):
     name = next((n for n in sheets if n.strip().lower() == "sales report"), None)
@@ -255,6 +262,11 @@ def excel_bytes(sheet_map):
 st.sidebar.header(t["data"])
 uploaded = st.sidebar.file_uploader(t["upload"], type=["xlsx", "xls", "xlsb"])
 if uploaded is None:
+    st.markdown(f"""
+    <div class="dashboard-header">
+     <div><h1>📊 {t['title']}</h1><p>{t['subtitle']} · Advanced Sales Performance Dashboard</p></div>
+     <div class="year-pill">📅 2026</div>
+    </div>""", unsafe_allow_html=True)
     st.info("👈 ارفع ملف Excel للبدء / Upload your Excel workbook to begin.")
     st.stop()
 
@@ -280,6 +292,12 @@ chosen_quarters = st.sidebar.multiselect(t["quarters"], ["Q1","Q2","Q3","Q4"], d
 if not chosen_products:
     st.warning("اختر منتجًا واحدًا على الأقل.")
     st.stop()
+
+st.markdown(f"""
+<div class="dashboard-header">
+ <div><h1>📊 {t['title']}</h1><p>{t['subtitle']} · Advanced Sales Performance Dashboard</p></div>
+ <div class="year-pill">📅 {year}</div>
+</div>""", unsafe_allow_html=True)
 
 year_data = data[(data.Year == year) & data.Product.isin(chosen_products)].copy()
 filtered = year_data[year_data.Quarter.isin(chosen_quarters)].copy()
@@ -308,17 +326,20 @@ st.markdown(f'<div class="section-heading">📈 {t["monthly"]} {year}</div>', un
 st.plotly_chart(monthly_chart(month_summary), use_container_width=True, config={"displayModeBar":False})
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# Three analysis panels, aligned horizontally as in the reference image.
-half_col, quarter_col, month_col = st.columns(3, gap="medium")
+# الصف الأول: النصف السنوي والربع السنوي بجانب بعضهما
+half_col, quarter_col = st.columns(2, gap="medium")
 with half_col:
     half = st.selectbox(t["select_half"], ["H1","H2"], index=1, key="half_choice")
-    render_panel(t["half"], half, year_data[year_data.Half == half], "half")
+    render_panel(t["half"], half, year_data[year_data.Half == half], "half", full_width=False)
 with quarter_col:
     quarter = st.selectbox(t["select_quarter"], ["Q1","Q2","Q3","Q4"], index=3, key="quarter_choice")
-    render_panel(t["quarter"], quarter, year_data[year_data.Quarter == quarter], "quarter")
-with month_col:
-    month = st.selectbox(t["select_month"], MONTHS, index=10, key="month_choice")
-    render_panel(t["month"], month, year_data[year_data.Month == month], "month")
+    render_panel(t["quarter"], quarter, year_data[year_data.Quarter == quarter], "quarter", full_width=False)
+
+st.markdown("<hr>", unsafe_allow_html=True)
+
+# الصف الثاني: تحليل الشهر في خانة مستقلة بعرض كامل
+month = st.selectbox(t["select_month"], MONTHS, index=10, key="month_choice")
+render_panel(t["month"], month, year_data[year_data.Month == month], "month", full_width=True)
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
