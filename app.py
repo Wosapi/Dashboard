@@ -57,6 +57,7 @@ TEXT = {
         "total_i": "إجمالي (عمود I)",
         "customer_count": "عدد العملاء",
         "total_amount": "مبلغ المبيعات (SAR)",
+        "period_display": "📅 الفترة النشطة:",
         "all": "الكل",
         "na": "غير متاح",
     },
@@ -94,6 +95,7 @@ TEXT = {
         "total_i": "Total (Col I)",
         "customer_count": "Customers",
         "total_amount": "Sales Amount (SAR)",
+        "period_display": "📅 Active Period:",
         "all": "All",
         "na": "N/A",
     },
@@ -129,6 +131,11 @@ div[data-testid="stMetricValue"] {{color:{C['navy']}; font-weight:800; font-size
     background:linear-gradient(100deg,{C['navy']},{C['navy2']});
     color:white; padding:10px 12px; border-radius:10px; margin:3px 0 10px;
     font-weight:750; min-height:44px; display:flex; align-items:center; gap:6px;
+}}
+.period-badge {{
+    background:#e6fffa; border:1px solid #319795; color:#234e52;
+    padding:6px 12px; border-radius:8px; font-weight:700; font-size:0.85rem;
+    margin-bottom:10px; display:inline-block;
 }}
 hr {{border:0; border-top:1px solid {C['border']}; margin:0.85rem 0;}}
 @media(max-width:700px) {{.block-container{{padding:.6rem .55rem 1.5rem;}} .dashboard-header{{padding:13px;}}}}
@@ -496,13 +503,18 @@ with daily_col:
     daily_df = daily_data_from_sheet(sheets)
     if daily_df is not None and not daily_df.empty:
         dy_filtered = daily_df[daily_df.Parsed_Date.dt.year == year].copy()
-        
+        if dy_filtered.empty:
+            dy_filtered = daily_df.copy()  # Fallback لتجنب الفراغ إذا كانت السنة في شيت Data مختلفة
+            
         if not dy_filtered.empty:
             dy_filtered["Date_Only"] = dy_filtered.Parsed_Date.dt.date
             min_d = dy_filtered["Date_Only"].min()
             max_d = dy_filtered["Date_Only"].max()
             
-            # خيارات مرنة متعددة لاختيار التاريخ اليومي (الكل، يوم محدد، أو نطاق تاريخي)
+            # عرض الفترة النشطة بوضوح تام فوق الجدول
+            if pd.notna(min_d) and pd.notna(max_d):
+                st.markdown(f'<div class="period-badge">{t["period_display"]} من {min_d} إلى {max_d}</div>', unsafe_allow_html=True)
+            
             filter_mode = st.radio(
                 "طريقة العرض:" if lang == "ar" else "Filter mode:",
                 ["جميع الأيام", "تاريخ محدد", "نطاق تاريخي"],
@@ -556,7 +568,7 @@ with daily_col:
                     }),
                     use_container_width=True,
                     hide_index=True,
-                    height=220
+                    height=200
                 )
             else:
                 st.warning(t["no_data"])
