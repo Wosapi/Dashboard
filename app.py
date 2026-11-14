@@ -21,11 +21,16 @@ except:
 st.title("📊 لوحة تحكم أداء المبيعات والتحليل المتقدم")
 st.markdown("متابعة المستهدف والمبيعات الفعلية ومقارنة الأداء للشركات الكبرى.")
 
-# تحميل البيانات
-file_path = "data/sales_data.xlsx"
-df = load_excel_data(file_path)
+# إضافة خانة رفع الملف في الشريط الجانبي (Sidebar)
+st.sidebar.header("إدارة البيانات والملفات")
+uploaded_file = st.sidebar.file_uploader("اختر ملف Excel (.xlsx)", type=["xlsx", "xls"])
+
+# تحميل البيانات (سواء من المرفوع أو المسار الافتراضي)
+df = load_excel_data(uploaded_file)
 
 if df is not None:
+    st.sidebar.success="تم تحميل البيانات بنجاح!"
+    
     st.sidebar.header("الفلاتر التفاعلية")
     selected_year = st.sidebar.selectbox("اختر السنة", YEARS)
     selected_product = st.sidebar.multiselect("اختر فئات المنتجات", PRODUCTS, default=PRODUCTS)
@@ -42,4 +47,4 @@ if df is not None:
         mime='text/csv',
     )
 else:
-    st.warning("يرجى التأكد من وضع ملف Excel في مجلد data باسم sales_data.xlsx")
+    st.warning("⚠️ يرجى رفع ملف Excel باستخدام خانة الرفع في القائمة الجانبية، أو التأكد من وضع الملف في مجلد data باسم sales_data.xlsx")
