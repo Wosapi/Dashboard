@@ -385,42 +385,40 @@ def render_panel(title, period, data, key, icon="📊", full_width=False):
                         )
 
 def parse_excel_date(series, target_year=2026):
-    """دالة قراءة وتحويل التواريخ الذكية (تدعم صيغ DD-MMM مثل 11-Nov والأرقام التسلسلية) وربطها بالسنة المختارة"""
-    parsed = pd.to_datetime(series, errors="coerce")
+    """دالة قراءة وتحويل التواريخ بدقة لملفات الإكسيل"""
+    s_cleaned = series.astype(str).str.strip()
+    parsed = pd.to_datetime(s_cleaned, errors="coerce", dayfirst=True)
     
-    # 1. فحص الأرقام التسلسلية للإكسس
-    numeric_vals = pd.to_numeric(series, errors="coerce")
-    serial_mask = numeric_vals.notna() & (numeric_vals > 1000)
-    if serial_mask.any():
-        serial_dates = pd.to_datetime(numeric_vals[serial_mask], unit="D", origin="1899-12-30", errors="coerce")
-        parsed.update(serial_dates)
-        
-    # 2. فحص القيم النصية مثل (13-Jun أو 11-Nov) غير المفسرة بشكل صحيح
     unparsed_mask = parsed.isna() | (parsed.dt.year < 2000)
     if unparsed_mask.any():
-        sub = series[unparsed_mask].astype(str).str.strip()
-        parsed_str = pd.to_datetime(sub, errors="coerce", dayfirst=True)
-        
-        for idx in sub[parsed_str.isna() | (parsed_str.dt.year <= 1900)].index:
-            val = str(sub[idx])
+        for idx in unparsed_mask[unparsed_mask].index:
+            val = s_cleaned[idx]
             try:
-                dt = pd.to_datetime(val, format='%d-%b', errors='coerce')
+                dt = pd.to_datetime(val, errors='coerce')
                 if pd.notna(dt):
-                    parsed_str.loc[idx] = dt.replace(year=int(target_year))
+                    if dt.year <= 1900 or dt.year == 1970:
+                        dt = dt.replace(year=int(target_year))
+                    parsed.loc[idx] = dt
+                else:
+                    parts = val.replace('/', '-').split('-')
+                    if len(parts) >= 2:
+                        day = int(parts[0])
+                        month_map = {'jan':1, 'feb':2, 'mar':3, 'apr':4, 'may':5, 'jun':6, 'jul':7, 'aug':8, 'sep':9, 'oct':10, 'nov':11, 'dec':12}
+                        m_str = parts[1].lower()[:3]
+                        if m_str in month_map:
+                            month = month_map[m_str]
+                            year = int(target_year)
+                            if len(parts) == 3 and len(parts[2]) > 0:
+                                yr_val = int(parts[2])
+                                year = yr_val if yr_val > 2000 else 2000 + yr_val
+                            parsed.loc[idx] = pd.Timestamp(year=year, month=month, day=day)
             except:
                 pass
                 
-        valid_str = parsed_str.notna()
-        if valid_str.any():
-            parsed_str = parsed_str.apply(lambda dt: dt.replace(year=int(target_year)) if pd.notna(dt) else dt)
-            parsed.update(parsed_str)
-            
-    # الضبط النهائي لربط أي تاريخ بالسنة النشطة
-    parsed = parsed.apply(lambda dt: dt.replace(year=int(target_year)) if pd.notna(dt) else dt)
     return parsed
 
 def daily_data_from_sheet(sheets, active_year):
-    """سحب البيانات الفعلية فقط من شيت Data واستبعاد الصفوف المستقبلية/الفارغة"""
+    """سحب البيانات الفعلية فقط من شيت Data واستبعاد الصفوف الفارغة أو المستقبلية الوهمية"""
     name = next((n for n in sheets if n.strip().lower() == "data"), None)
     if not name:
         return None
@@ -434,13 +432,13 @@ def daily_data_from_sheet(sheets, active_year):
     res["Total_I"] = pd.to_numeric(df.iloc[:, 8], errors="coerce")     # العمود I (الكمية)
     res["Customer"] = df.iloc[:, 5]                                    # العمود F (أرقام العملاء)
     
-    # استبعاد الصفوف التي ليس لها تاريخ
+    # 1. إزالة أي صف لا يحتوي على تاريخ صحيح
     res = res.dropna(subset=["Parsed_Date"]).copy()
     
-    # فلترة مهمة: الإبقاء فقط على الصفوف التي تحتوي على حركة بيع فعلية
-    has_customer = res["Customer"].notna() & (res["Customer"].astype(str).str.strip() != "")
-    has_amount = res["Amount"].fillna(0) > 0
-    has_qty = res["Total_I"].fillna(0) > 0
+    # 2. فلترة قوية جداً: استبعاد الصفوف التي تكون فيها القيم فارغة أو أصفار تماماً
+    has_customer = res["Customer"].notna() & (res["Customer"].astype(str).str.strip() != "") & (res["Customer"].astype(str).str.strip() != "nan")
+    has_amount = res["Amount"].notna() & (res["Amount"] != 0)
+    has_qty = res["Total_I"].notna() & (res["Total_I"] != 0)
     
     res = res[has_customer | has_amount | has_qty].copy()
     
@@ -552,7 +550,6 @@ with daily_col:
             min_d = dy_filtered["Date_Only"].min()
             max_d = dy_filtered["Date_Only"].max()
             
-            # عرض الفترة النشطة الصحيحة بوضوح تام فوق الجدول
             if pd.notna(min_d) and pd.notna(max_d):
                 st.markdown(f'<div class="period-badge">{t["period_display"]} من {min_d} إلى {max_d}</div>', unsafe_allow_html=True)
             
