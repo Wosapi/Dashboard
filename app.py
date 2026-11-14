@@ -35,12 +35,12 @@ body { background-color: #F4F7FB; color: #263445; direction: rtl; text-align: ri
 h1, h2, h3 { color: #142B4A; }
 .product-card {
     background-color: #FFFFFF;
-    border: 1px solid #E2E8F0;
+    border: 2px solid #CBD5E1;
     border-radius: 14px;
-    padding: 15px;
+    padding: 16px;
     text-align: center;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.03);
-    margin-bottom: 10px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.04);
+    margin-bottom: 12px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -314,7 +314,7 @@ if sheets_dict is not None:
             st.subheader(f"📈 نظرة عامة على الأداء الشهري لعام {selected_year}")
             st.plotly_chart(plot_monthly_target_vs_actual(m_summary), use_container_width=True, config={'displayModeBar': False})
 
-            # --- 3. تصميم نسب تحقيق المستهدف حسب فئة المنتج ---
+            # --- 3. نسب تحقيق المستهدف حسب فئة المنتج (تصميم البطاقات المربعة) ---
             st.markdown("### 🎯 نسب تحقيق المستهدف حسب فئة المنتج")
             prod_colors = {
                 "Fluids": COLORS["navy_blue"],
@@ -443,35 +443,30 @@ if sheets_dict is not None:
 
             st.markdown("---")
 
-            # --- 6. التحليل الربعي ونصف السنوي (مصمم بنمط الأربع بطاقات للـ Fluids, DEO, Syn, Min مثل التصميم المطلوب) ---
-            st.subheader("🗓️ التحليل الربعي ونصف السنوي (أداء الفئات عبر الأرباع)")
+            # --- 6. التحليل الربعي (الأعمدة البيانية المطلوبة) ---
+            st.subheader("🗓️ التحليل الربعي ونصف السنوي")
+            q_summary = summarize_by_period(filtered_df, ["Quarter"])
             
-            selected_q_card = st.selectbox("اختر الربع السنوي للعرض التفاعلي:", ["Q1", "Q2", "Q3", "Q4"], index=0)
-            
-            q_filtered_df = clean_df[
-                (clean_df["Year"] == selected_year) & 
-                (clean_df["Quarter"] == selected_q_card) & 
-                (clean_df["Product"].isin(selected_products))
-            ]
-
-            q_d_cols = st.columns(4)
-            for idx, prod in enumerate(PRODUCTS):
-                q_prod_row = q_filtered_df[q_filtered_df["Product"] == prod]
-                q_target = q_prod_row["Target"].sum() if not q_prod_row.empty else 0
-                q_actual = q_prod_row["Actual"].sum(min_count=1) if not q_prod_row.empty else np.nan
-                q_pct = (q_actual / q_target * 100) if (pd.notna(q_actual) and q_target > 0) else np.nan
-                
-                # الاتجاه الشهري ضمن هذا الربع للفئة
-                q_trend_df = q_prod_row.sort_values("Month_Num")
-
-                with q_d_cols[idx]:
-                    st.markdown("<div class='product-card'>", unsafe_allow_html=True)
-                    st.plotly_chart(create_donut_chart(q_pct, prod_colors[prod]), use_container_width=True, config={'displayModeBar': False})
-                    st.markdown(f"**فئة {prod} ({selected_q_card})**", unsafe_allow_html=True)
-                    st.plotly_chart(plot_mini_trend(q_trend_df, prod_colors[prod]), use_container_width=True, config={'displayModeBar': False})
-                    qa_str = f"{q_actual:,.2f}" if pd.notna(q_actual) else "0.00"
-                    st.markdown(f"<span style='font-size:11px; color:#555;'>الفعلي: {qa_str} / المستهدف: {q_target:,.2f}</span>", unsafe_allow_html=True)
-                    st.markdown("</div>", unsafe_allow_html=True)
+            fig_q = go.Figure()
+            fig_q.add_trace(go.Bar(
+                x=q_summary["Quarter"], y=q_summary["Target"],
+                name="مستهدف الربع", marker_color=COLORS["navy_blue"],
+                text=q_summary["Target"].round(2), textposition="auto"
+            ))
+            fig_q.add_trace(go.Bar(
+                x=q_summary["Quarter"], y=q_summary["Actual"],
+                name="فعلي الربع", marker_color=COLORS["teal"],
+                text=q_summary["Actual"].round(2), textposition="auto"
+            ))
+            fig_q.update_layout(
+                barmode="group",
+                plot_bgcolor=COLORS["white"],
+                paper_bgcolor=COLORS["white"],
+                font_color=COLORS["text"],
+                margin=dict(l=20, r=20, t=30, b=20),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            )
+            st.plotly_chart(fig_q, use_container_width=True, config={'displayModeBar': False})
 
             st.markdown("---")
 
@@ -487,6 +482,7 @@ if sheets_dict is not None:
             export_sheets = {
                 "Monthly_All": m_summary.drop(columns=["Month_Num"]),
                 f"Month_{selected_single_month}": single_month_enriched.drop(columns=["Month_Num"]),
+                "Quarterly": q_summary,
                 "Products": p_summary
             }
             if daily_sheets and 'daily_grouped' in locals():
