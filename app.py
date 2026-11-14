@@ -61,7 +61,6 @@ if raw_df is not None:
         ach_pct = (total_actual / total_target * 100) if (pd.notna(total_actual) and total_target > 0) else np.nan
         remaining = (total_target - total_actual) if pd.notna(total_actual) else total_target
 
-        # أفضل شهر وأفضل منتج
         m_summary = summarize_by_period(filtered_df, ["Month_Num", "Month"]).sort_values("Month_Num")
         valid_m = m_summary.dropna(subset=["Actual"])
         best_month = valid_m.loc[valid_m["Actual"].idxmax(), "Month"] if not valid_m.empty else "لا يوجد"
@@ -80,7 +79,7 @@ if raw_df is not None:
 
         st.markdown("---")
 
-        # --- 2. القسم العلوي: التحليل الشهري (Bar + Line) ---
+        # --- 2. القسم العلوي: التحليل الشهري ---
         st.subheader(f"📈 الأداء الشهري المفصل لعام {selected_year}")
         c1, c2 = st.columns([3, 2])
         with c1:
@@ -90,7 +89,7 @@ if raw_df is not None:
             st.markdown("**مسار النمو الشهري (Trend)**")
             st.plotly_chart(plot_monthly_growth_line(m_summary), use_container_width=True)
 
-        # --- 3. القسم السفلي: دوائر الإنجاز الحقيقية للمنتجات الأربعة ---
+        # --- 3. القسم السفلي: دوائر الإنجاز للمنتجات ---
         st.subheader("🎯 نسب تحقيق المستهدف حسب فئة المنتج")
         year_prod_df = summarize_by_period(
             clean_df[(clean_df["Year"] == selected_year) & (clean_df["Quarter"].isin(selected_quarters))],
@@ -119,7 +118,7 @@ if raw_df is not None:
 
         st.markdown("---")
 
-        # --- 4. التحليل الربعي ونصف السنوي ومقارنة السنوات ---
+        # --- 4. التحليل الربعي ونصف السنوي ---
         st.subheader("🗓️ التحليل الربعي (Q1 - Q4) ونصف السنوي (H1 - H2)")
         q_summary = summarize_by_period(filtered_df, ["Quarter"])
         h_summary = summarize_by_period(filtered_df, ["Half"])
@@ -142,7 +141,7 @@ if raw_df is not None:
 
         st.markdown("---")
 
-        # --- 5. الجداول التفصيلية والتصدير ---
+        # --- 5. الجداول التحليلية والتصدير ---
         st.subheader("📋 الجداول التحليلية المفصلة")
         tab1, tab2, tab3, tab4 = st.tabs(["التفصيل الشهري", "تفصيل المنتجات", "مقارنة السنوات", "البيانات الخام المعالجة"])
 
@@ -173,7 +172,6 @@ if raw_df is not None:
                 use_container_width=True
             )
 
-        # أزرار التصدير الاحترافية
         st.markdown("### 📥 تصدير التقارير")
         exp1, exp2 = st.columns(2)
         with exp1:
@@ -199,4 +197,4 @@ if raw_df is not None:
                 mime="text/csv"
             )
 else:
-    st.info("👈 ارفع ملف Excel الخاص بالمبيعات من القائمة الجانبية لعرض التحليل الشهري والربعي الكامل.")
+    st.info("👈 ارفع ملف Excel الخاص بالمبيعات من القائمة الجانبية لعرض لوحة التحكم بالرسوم البيانية الكاملة.")
