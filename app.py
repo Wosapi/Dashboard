@@ -418,19 +418,27 @@ def parse_excel_date(series, target_year=2026):
     return parsed
 
 def daily_data_from_sheet(sheets, active_year):
-    """سحب البيانات الفعلية الذكية من شيت Data بالبحث عن الأعمدة بالاسم أو الفهرس الآمن"""
-    name = next((n for n in sheets if n.strip().lower() == "data"), None)
-    if not name:
+    """البحث المرن عن شيت البيانات واستخراج الأعمدة بأمان تام"""
+    # البحث عن اسم الشيت بشكل مرن (يتجاهل الفروقات في الحروف أو المسافات)
+    sheet_name = None
+    for n in sheets:
+        clean_n = n.strip().lower()
+        if "data" in clean_n or "بيانات" in clean_n:
+            sheet_name = n
+            break
+    
+    # إذا لم يوجد اسم مطابق، نأخذ أول شيت في الملف افتراضياً
+    if not sheet_name and len(sheets) > 0:
+        sheet_name = list(sheets.keys())[0]
+        
+    if not sheet_name:
         return None
-    df = sheets[name].copy()
+        
+    df = sheets[sheet_name].copy()
     if df.empty or df.shape[1] < 4:
         return None
     
-    # البحث الذكي عن الأعمدة بناءً على محتوى العناوين أو استخدام الأعمدة الافتراضية بأمان
-    col_date = None
-    col_amount = None
-    col_total_i = None
-    col_customer = None
+    col_date, col_amount, col_total_i, col_customer = None, None, None, None
     
     for c in df.columns:
         c_str = str(c).lower().strip()
@@ -438,23 +446,23 @@ def daily_data_from_sheet(sheets, active_year):
             col_date = c
         elif any(x in c_str for x in ["amount", "مبلغ", "المبيعات"]):
             col_amount = c
-        elif any(x in c_str for x in ["total", "إجمالي", "quanti"]):
+        elif any(x in c_str for x in ["total", "إجمالي", "quanti", "كمية"]):
             col_total_i = c
         elif any(x in c_str for x in ["customer", "عميل", "العملاء"]):
             col_customer = c
 
     res = pd.DataFrame()
     
-    # تعيين الأعمدة بالطريقة الذكية أو الرجوع للفهارس القياسية إذا لزم الأمر
+    # الاعتماد على الأعمدة المكتشفة أو الفهارس البديلة الآمنة بناءً على صور ملفك
     res["Parsed_Date"] = parse_excel_date(df[col_date] if col_date else df.iloc[:, min(9, df.shape[1]-1)], target_year=active_year)
     res["Amount"] = pd.to_numeric(df[col_amount] if col_amount else df.iloc[:, min(3, df.shape[1]-1)], errors="coerce")
     res["Total_I"] = pd.to_numeric(df[col_total_i] if col_total_i else df.iloc[:, min(8, df.shape[1]-1)], errors="coerce")
     res["Customer"] = df[col_customer] if col_customer else df.iloc[:, min(5, df.shape[1]-1)]
     
-    # 1. إزالة أي صف لا يحتوي على تاريخ صحيح
+    # 1. إزالة الصفوف التي ليس لها تاريخ صحيح
     res = res.dropna(subset=["Parsed_Date"]).copy()
     
-    # 2. فلترة صارمة: استبعاد الصفوف الفارغة أو الأصفار تماماً
+    # 2. استبعاد الصفوف الوهمية أو الفارغة بالكامل
     has_customer = res["Customer"].notna() & (res["Customer"].astype(str).str.strip() != "") & (res["Customer"].astype(str).str.strip() != "nan")
     has_amount = res["Amount"].notna() & (res["Amount"] != 0)
     has_qty = res["Total_I"].notna() & (res["Total_I"] != 0)
@@ -632,7 +640,7 @@ with daily_col:
         else:
             st.warning(t["no_data"])
     else:
-        st.info("ℹ️ لم يتم العثور على شيت Data أو أن الأعمدة المطلوبة غير متوفرة بشكل صحيح.")
+        st.info("ℹ️ لم يتم العثور على شيت البيانات أو أن الأعمدة غير متوفرة.")
 
 st.markdown("<hr>", unsafe_allow_html=True)
 st.markdown(f'<div class="section-heading">📋 {t["tables"]}</div>', unsafe_allow_html=True)
