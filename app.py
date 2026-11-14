@@ -184,13 +184,6 @@ def plot_monthly_target_vs_actual(monthly_df):
     fig.update_layout(barmode="group", plot_bgcolor=COLORS["white"], paper_bgcolor=COLORS["white"], font_color=COLORS["text"], margin=dict(l=20, r=20, t=40, b=20), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
     return fig
 
-def plot_single_month_products(month_prod_df, month_name):
-    fig = go.Figure()
-    fig.add_trace(go.Bar(x=month_prod_df["Product"], y=month_prod_df["Target"], name="المستهدف", marker_color=COLORS["navy_blue"], text=month_prod_df["Target"].round(2), textposition="auto"))
-    fig.add_trace(go.Bar(x=month_prod_df["Product"], y=month_prod_df["Actual"], name="الفعلي", marker_color=COLORS["green"], text=month_prod_df["Actual"].round(2), textposition="auto"))
-    fig.update_layout(title=f"مقارنة المنتجات لشهر {month_name}", barmode="group", plot_bgcolor=COLORS["white"], paper_bgcolor=COLORS["white"], font_color=COLORS["text"], margin=dict(l=20, r=20, t=50, b=20), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-    return fig
-
 def plot_quarterly_comparison(quarterly_df):
     fig = go.Figure()
     fig.add_trace(go.Bar(x=quarterly_df["Quarter"], y=quarterly_df["Target"], name="مستهدف الربع", marker_color="#1E3A5F"))
@@ -271,7 +264,7 @@ if sheets_dict is not None:
             st.subheader(f"📈 نظرة عامة على الأداء الشهري لعام {selected_year}")
             st.plotly_chart(plot_monthly_target_vs_actual(m_summary), use_container_width=True)
 
-            # --- 3. دوائر الإنجاز ---
+            # --- 3. دوائر الإنجاز (العامة) ---
             st.subheader("🎯 نسب تحقيق المستهدف حسب فئة المنتج")
             year_prod_df = summarize_by_period(clean_df[(clean_df["Year"] == selected_year) & (clean_df["Quarter"].isin(selected_quarters))], ["Product"])
             prod_colors = {"Min": COLORS["dark_blue"], "Syn": COLORS["orange"], "DEO": COLORS["teal"], "Fluids": COLORS["navy_blue"]}
@@ -289,9 +282,9 @@ if sheets_dict is not None:
 
             st.markdown("---")
 
-            # --- 4. تفاصيل المبيعات الشهرية (كل شهر لوحده - بدون الجدول المزعج) ---
-            st.subheader(f"🔍 تحليل الشهر الفردي المفصل (كل شهر لوحده) - {selected_year}")
-            selected_single_month = st.selectbox("اختر الشهر لعرض تفاصيله الكاملة:", VALID_MONTHS, index=0)
+            # --- 4. تفاصيل المبيعات الشهرية عبر بطاقات دائرية للشهر المحدد ---
+            st.subheader(f"🔍 مقارنة منتجات الشهر المفصل (بطاقات نسب الإنجاز) - {selected_year}")
+            selected_single_month = st.selectbox("اختر الشهر لعرض دوائر نسب تحقيقه الكاملة:", VALID_MONTHS, index=0)
             
             single_month_df = clean_df[
                 (clean_df["Year"] == selected_year) & 
@@ -311,8 +304,20 @@ if sheets_dict is not None:
             sm3.metric("نسبة تحقيق الشهر", f"{sm_ach:.1f}%" if pd.notna(sm_ach) else "—")
             sm4.metric("الفارق (Variance)", f"{sm_var:+,.2f}" if pd.notna(sm_var) else "—")
 
-            # عرض الرسم البياني للشهر الفردي بعرض الشاشة الكاملة
-            st.plotly_chart(plot_single_month_products(single_month_enriched, selected_single_month), use_container_width=True)
+            # عرض المنتجات كبطاقات دائرية احترافية لشهر المحدد
+            st.markdown(f"**نسب تحقيق المنتجات لشهر {selected_single_month}:**")
+            m_d_cols = st.columns(len(PRODUCTS))
+            for idx, prod in enumerate(PRODUCTS):
+                p_row = single_month_enriched[single_month_enriched["Product"] == prod]
+                p_pct = p_row["Achievement %"].values[0] if not p_row.empty else np.nan
+                p_t = p_row["Target"].values[0] if not p_row.empty else 0
+                p_a = p_row["Actual"].values[0] if not p_row.empty else np.nan
+                
+                with m_d_cols[idx]:
+                    st.markdown(f"<div style='background-color: white; padding: 12px; border-radius: 12px; text-align: center;'>", unsafe_allow_html=True)
+                    st.plotly_chart(create_donut_chart(p_pct, prod_colors[prod]), use_container_width=True)
+                    p_a_str = f"{p_a:,.2f}" if pd.notna(p_a) else "0.00"
+                    st.markdown(f"**{prod}**<br><span style='font-size:11px; color:#555;'>الفعلي: {p_a_str} <br> المستهدف: {p_t:,.2f}</span></div>", unsafe_allow_html=True)
 
             st.markdown("---")
 
