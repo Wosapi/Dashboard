@@ -1,0 +1,20 @@
+sales-target-dashboard/
+│
+├── app.py
+├── config.py
+├── requirements.txt
+├── README.md
+├── .gitignore
+│
+├── data/
+│   └── sales_data.xlsx
+│
+├── modules/
+│   ├── data_loader.py
+│   ├── data_processor.py
+│   ├── calculations.py
+│   ├── charts.py
+│   └── exports.py
+│
+└── assets/
+    └── style.css
