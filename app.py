@@ -55,9 +55,10 @@ TEXT = {
         "select_month": "📅 اختر الشهر",
         "daily_month": "🗓️ شهر المبيعات",
         "search_day": "🔍 ابحث عن اليوم",
-        "sales_count": "عدد المبيعات",
-        "invoice_count": "عدد الفواتير",
-        "total_amount": "إجمالي المبلغ (SAR)",
+        "sales_count": "عدد العمليات",
+        "total_i": "إجمالي (عمود I)",
+        "customer_count": "عدد العملاء",
+        "total_amount": "مبلغ المبيعات (SAR)",
         "all": "الكل",
         "na": "غير متاح",
     },
@@ -93,9 +94,10 @@ TEXT = {
         "select_month": "📅 Select month",
         "daily_month": "🗓️ Sales Month",
         "search_day": "🔍 Search Day",
-        "sales_count": "Sales Count",
-        "invoice_count": "Invoice Count",
-        "total_amount": "Total Amount (SAR)",
+        "sales_count": "Transactions",
+        "total_i": "Total (Col I)",
+        "customer_count": "Customers",
+        "total_amount": "Sales Amount (SAR)",
         "all": "All",
         "na": "N/A",
     },
@@ -380,30 +382,19 @@ def render_panel(title, period, data, key, icon="📊", full_width=False):
                         )
 
 def daily_data_from_sheet(sheets):
+    """سحب البيانات من شيت Data بالاعتماد على الأعمدة المطلوبة: D (مبلغ المبيعات), I (إجمالي المبيعات), J (التاريخ), F (أرقام العملاء)"""
     name = next((n for n in sheets if n.strip().lower() == "data"), None)
     if not name:
         return None
     df = sheets[name].copy()
-    if df.shape[1] < 10:
+    if df.shape[1] < 10:  # التأكد من وجود أعمدة حتى العمود J (index 9) على الأقل
         return None
-    
-    date_col_idx = None
-    for idx in [8, 9]:
-        if idx < df.shape[1]:
-            parsed = pd.to_datetime(df.iloc[:, idx], errors="coerce")
-            if parsed.notna().sum() > 0:
-                date_col_idx = idx
-                break
-    if date_col_idx is None:
-        return None
-        
-    invoice_col_idx = 9 if date_col_idx == 8 else 8
-    amount_col_idx = 3  # العمود D
     
     res = pd.DataFrame()
-    res["Parsed_Date"] = pd.to_datetime(df.iloc[:, date_col_idx], errors="coerce")
-    res["Amount"] = pd.to_numeric(df.iloc[:, amount_col_idx], errors="coerce")
-    res["Invoice"] = df.iloc[:, invoice_col_idx]
+    res["Parsed_Date"] = pd.to_datetime(df.iloc[:, 9], errors="coerce") # العمود J (index 9)
+    res["Amount"] = pd.to_numeric(df.iloc[:, 3], errors="coerce")       # العمود D (index 3)
+    res["Total_I"] = pd.to_numeric(df.iloc[:, 8], errors="coerce")     # العمود I (index 8)
+    res["Customer"] = df.iloc[:, 5]                                    # العمود F (index 5)
     
     return res.dropna(subset=["Parsed_Date"]).copy()
 
@@ -493,7 +484,7 @@ with quarter_col:
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# الصف الثاني: تحليل الشهر بجانب جدول تحليل المبيعات اليومية من شيت Data (تلقائياً لنفس سنة الكشف بدون فلتر سنة منفصل، مع إمكانية اختيار الشهر والبحث عن يوم محدد)
+# الصف الثاني: تحليل الشهر بجانب جدول تحليل المبيعات اليومية من شيت Data
 month_col, daily_col = st.columns(2, gap="medium")
 
 with month_col:
@@ -504,7 +495,7 @@ with daily_col:
     st.markdown(f'<div class="panel-heading">📋 {t["daily"]}</div>', unsafe_allow_html=True)
     daily_df = daily_data_from_sheet(sheets)
     if daily_df is not None and not daily_df.empty:
-        # ربط بيانات المبيعات اليومية بسنة الكشف المختارة في الأعلى تلقائياً وحذف اختيار السنة
+        # ربط البيانات تلقائياً بسنة الكشف المختارة
         dy_filtered = daily_df[daily_df.Parsed_Date.dt.year == year].copy()
         dy_filtered["Month_Name"] = dy_filtered.Parsed_Date.dt.strftime("%b")
         
@@ -519,7 +510,6 @@ with daily_col:
         if not dy_filtered.empty:
             dy_filtered["Date_Only"] = dy_filtered.Parsed_Date.dt.date
             
-            # خيار البحث عن يوم محدد
             all_dates = sorted(dy_filtered["Date_Only"].unique().tolist(), reverse=True)
             date_options = [t["all"]] + [str(d) for d in all_dates]
             
@@ -530,21 +520,26 @@ with daily_col:
                 dy_filtered = dy_filtered[dy_filtered["Date_Only"].astype(str) == selected_day]
             
             if not dy_filtered.empty:
-                # تجميع البيانات لكل يوم
+                # تجميع البيانات حسب التاريخ باستخدام الأعمدة المطلوبة
                 grouped_daily = dy_filtered.groupby("Date_Only", as_index=False).agg(
                     Sales_Count=("Amount", "count"),
-                    Invoice_Count=("Invoice", "nunique"),
+                    Total_I_Sum=("Total_I", "sum"),
+                    Customer_Count=("Customer", "nunique"),
                     Total_Amount=("Amount", "sum")
                 ).sort_values("Date_Only", ascending=False)
                 
-                # عرض جدول المبيعات اليومية
+                # عرض جدول المبيعات اليومية بشكل مرتب
                 st.dataframe(
                     grouped_daily.rename(columns={
                         "Date_Only": "التاريخ",
                         "Sales_Count": t["sales_count"],
-                        "Invoice_Count": t["invoice_count"],
+                        "Total_I_Sum": t["total_i"],
+                        "Customer_Count": t["customer_count"],
                         "Total_Amount": t["total_amount"]
-                    }).style.format({"Total_Amount": "{:,.2f}"}),
+                    }).style.format({
+                        "Total_I_Sum": "{:,.2f}",
+                        "Total_Amount": "{:,.2f}"
+                    }),
                     use_container_width=True,
                     hide_index=True,
                     height=245
