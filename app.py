@@ -45,7 +45,7 @@ TEXT = {
         "variance": "⚖️ الفرق",
         "product_perf": "أداء المنتجات",
         "total_chart": "الإجمالي (فعلي مقابل مستهدف)",
-        "daily": "تحليل المبيعات اليومية (شيت Data)",
+        "daily": "جدول تحليل المبيعات اليومية (شيت Data)",
         "tables": "الجداول التحليلية",
         "export": "تصدير التقارير",
         "download": "تحميل التقرير الشامل (Excel)",
@@ -57,7 +57,7 @@ TEXT = {
         "daily_month": "🗓️ شهر المبيعات اليومية",
         "sales_count": "عدد المبيعات",
         "invoice_count": "عدد الفواتير",
-        "total_amount": "إجمالي المبلغ",
+        "total_amount": "إجمالي المبلغ (SAR)",
         "all": "الكل",
         "na": "غير متاح",
     },
@@ -83,7 +83,7 @@ TEXT = {
         "variance": "⚖️ Variance",
         "product_perf": "Products Performance",
         "total_chart": "Total (Actual vs Target)",
-        "daily": "Daily Sales Breakdown (Data Sheet)",
+        "daily": "Daily Sales Table Breakdown (Data Sheet)",
         "tables": "Detailed Analytical Tables",
         "export": "Export Reports",
         "download": "Download Comprehensive Report (Excel)",
@@ -95,7 +95,7 @@ TEXT = {
         "daily_month": "🗓️ Daily Sales Month",
         "sales_count": "Sales Count",
         "invoice_count": "Invoice Count",
-        "total_amount": "Total Amount",
+        "total_amount": "Total Amount (SAR)",
         "all": "All",
         "na": "N/A",
     },
@@ -380,15 +380,14 @@ def render_panel(title, period, data, key, icon="📊", full_width=False):
                         )
 
 def daily_data_from_sheet(sheets):
-    """سحب البيانات من شيت Data بالاعتماد على الأعمدة D (مبلغ المبيعات) و I, J (التواريخ والفواتير)"""
+    """سحب البيانات من شيت Data بالاعتماد على العمود D (مبلغ المبيعات) و I, J (التواريخ والفواتير)"""
     name = next((n for n in sheets if n.strip().lower() == "data"), None)
     if not name:
         return None
     df = sheets[name].copy()
-    if df.shape[1] < 10:  # التأكد من وجود أعمدة حتى العمود J (index 9) على الأقل
+    if df.shape[1] < 10:
         return None
     
-    # تحديد عمود التاريخ من العمود I (index 8) أو J (index 9)
     date_col_idx = None
     for idx in [8, 9]:
         if idx < df.shape[1]:
@@ -400,7 +399,7 @@ def daily_data_from_sheet(sheets):
         return None
         
     invoice_col_idx = 9 if date_col_idx == 8 else 8
-    amount_col_idx = 3  # العمود D (index 3)
+    amount_col_idx = 3  # العمود D
     
     res = pd.DataFrame()
     res["Parsed_Date"] = pd.to_datetime(df.iloc[:, date_col_idx], errors="coerce")
@@ -495,7 +494,7 @@ with quarter_col:
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# الصف الثاني: تحليل الشهر بجانب تحليل المبيعات اليومية من شيت Data
+# الصف الثاني: تحليل الشهر بجانب جدول تحليل المبيعات اليومية من شيت Data
 month_col, daily_col = st.columns(2, gap="medium")
 
 with month_col:
@@ -503,7 +502,7 @@ with month_col:
     render_panel(t["month"], month, year_data[year_data.Month == month], "month", icon="📅", full_width=False)
 
 with daily_col:
-    st.markdown(f'<div class="panel-heading">📅 {t["daily"]}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="panel-heading">📋 {t["daily"]}</div>', unsafe_allow_html=True)
     daily_df = daily_data_from_sheet(sheets)
     if daily_df is not None and not daily_df.empty:
         daily_years = sorted(daily_df.Parsed_Date.dt.year.dropna().unique().tolist())
@@ -521,24 +520,14 @@ with daily_col:
             
         if not dy_filtered.empty:
             dy_filtered["Date_Only"] = dy_filtered.Parsed_Date.dt.date
-            # حساب عدد المبيعات، عدد الفواتير، وإجمالي المبلغ لكل يوم
+            # تجميع البيانات: عدد المبيعات، عدد الفواتير الفريدة، وإجمالي المبلغ لكل يوم
             grouped_daily = dy_filtered.groupby("Date_Only", as_index=False).agg(
                 Sales_Count=("Amount", "count"),
                 Invoice_Count=("Invoice", "nunique"),
                 Total_Amount=("Amount", "sum")
-            ).sort_values("Date_Only")
+            ).sort_values("Date_Only", ascending=False)
             
-            # رسم بياني لإجمالي المبلغ اليومي
-            fig = go.Figure(go.Bar(x=grouped_daily.Date_Only, y=grouped_daily.Total_Amount, marker_color=C["teal"]))
-            fig.update_layout(
-                height=238, margin=dict(l=6, r=6, t=24, b=6),
-                plot_bgcolor="white", paper_bgcolor="white",
-                font=dict(color=C["text"], size=10),
-                xaxis=dict(showgrid=False), yaxis=dict(gridcolor=C["gray"], rangemode="tozero")
-            )
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-            
-            # عرض جدول ملخص الإحصائيات اليومية
+            # عرض جدول المبيعات اليومية بشكل مرتب واحترافي
             st.dataframe(
                 grouped_daily.rename(columns={
                     "Date_Only": "التاريخ",
@@ -548,7 +537,7 @@ with daily_col:
                 }).style.format({"Total_Amount": "{:,.2f}"}),
                 use_container_width=True,
                 hide_index=True,
-                height=150
+                height=265
             )
         else:
             st.info(t["no_data"])
