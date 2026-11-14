@@ -1,4 +1,5 @@
 import io
+from datetime import timedelta
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -1009,15 +1010,21 @@ with daily_col:
         elif daily_df is None or daily_df.empty:
             st.warning("لا توجد بيانات مبيعات يومية صالحة في شيت Data.")
         else:
-            dy_filtered = daily_df[daily_df["Year"] == int(year)].copy()
+            year_daily = daily_df[daily_df["Year"] == int(year)].copy()
             selected_month_number = MONTHS.index(month) + 1
-            dy_filtered = dy_filtered[dy_filtered["Month_Num"] == selected_month_number].copy()
+            dy_filtered = year_daily[year_daily["Month_Num"] == selected_month_number].copy()
 
-            if dy_filtered.empty:
-                st.info(f"لا توجد مبيعات مسجلة في {MONTH_AR[month]} {year}.")
+            if year_daily.empty:
+                st.info(f"لا توجد مبيعات مسجلة في عام {year}.")
             else:
-                min_d = dy_filtered["Date_Only"].min()
-                max_d = dy_filtered["Date_Only"].max()
+                # حدود السنة كاملة (لحرية اختيار أي تاريخ) + حدود الشهر المختار (كقيمة افتراضية)
+                year_min = year_daily["Date_Only"].min()
+                year_max = year_daily["Date_Only"].max()
+                if dy_filtered.empty:
+                    min_d, max_d = year_min, year_max
+                else:
+                    min_d = dy_filtered["Date_Only"].min()
+                    max_d = dy_filtered["Date_Only"].max()
 
                 st.markdown(
                     f'<div class="period-badge">{t["period_display"]} {min_d} إلى {max_d}</div>',
@@ -1026,7 +1033,7 @@ with daily_col:
 
                 filter_mode = st.radio(
                     "طريقة العرض:",
-                    ["جميع الأيام", "تاريخ محدد", "نطاق تاريخي"],
+                    ["الشهر كاملاً", "تاريخ محدد", "نطاق تاريخي"],
                     horizontal=True,
                     key="daily_filter_mode"
                 )
@@ -1034,31 +1041,52 @@ with daily_col:
                 daily_view = dy_filtered.copy()
 
                 if filter_mode == "تاريخ محدد":
+                    # أي يوم ضمن بيانات السنة (وليس الشهر المختار فقط)
                     selected_date = st.date_input(
                         "اختر اليوم المطلوب:",
                         value=max_d,
-                        min_value=min_d,
-                        max_value=max_d,
-                        key="daily_single_date"
+                        min_value=year_min,
+                        max_value=year_max,
+                        key=f"daily_single_date_{year}_{month}"
                     )
                     if selected_date:
-                        daily_view = daily_view[daily_view["Date_Only"] == selected_date]
+                        daily_view = year_daily[year_daily["Date_Only"] == selected_date]
 
                 elif filter_mode == "نطاق تاريخي":
-                    date_range = st.date_input(
-                        "اختر نطاق التواريخ:",
-                        value=(min_d, max_d),
-                        min_value=min_d,
-                        max_value=max_d,
-                        key="daily_date_range"
+                    presets = ["مخصص", "آخر 7 أيام", "آخر 30 يوماً", "الشهر المحدد", "السنة كاملة"]
+                    preset = st.selectbox(
+                        "اختصار سريع:",
+                        presets,
+                        key=f"daily_preset_{year}_{month}"
                     )
-                    if isinstance(date_range, tuple) and len(date_range) == 2:
-                        start_d, end_d = date_range
-                        if start_d and end_d:
-                            daily_view = daily_view[
-                                (daily_view["Date_Only"] >= start_d) &
-                                (daily_view["Date_Only"] <= end_d)
-                            ]
+
+                    if preset == "آخر 7 أيام":
+                        start_d, end_d = max(year_min, year_max - timedelta(days=6)), year_max
+                    elif preset == "آخر 30 يوماً":
+                        start_d, end_d = max(year_min, year_max - timedelta(days=29)), year_max
+                    elif preset == "الشهر المحدد":
+                        start_d, end_d = min_d, max_d
+                    elif preset == "السنة كاملة":
+                        start_d, end_d = year_min, year_max
+                    else:
+                        date_range = st.date_input(
+                            "اختر نطاق التواريخ:",
+                            value=(min_d, max_d),
+                            min_value=year_min,
+                            max_value=year_max,
+                            key=f"daily_date_range_{year}_{month}"
+                        )
+                        if isinstance(date_range, (tuple, list)) and len(date_range) == 2:
+                            start_d, end_d = date_range
+                        else:
+                            start_d, end_d = min_d, max_d
+                            st.caption("ℹ️ اختر تاريخ النهاية لإكمال النطاق.")
+
+                    daily_view = year_daily[
+                        (year_daily["Date_Only"] >= start_d) &
+                        (year_daily["Date_Only"] <= end_d)
+                    ]
+                    st.caption(f"📆 {start_d} ← {end_d}")
 
                 if not daily_view.empty:
                     grouped_daily = (
