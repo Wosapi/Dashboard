@@ -357,9 +357,9 @@ if sheets_dict is not None:
 
             st.markdown("---")
 
-            # --- 4. تفاصيل المبيعات الشهرية المفصلة (بطاقات دائرية شبكية + أعمدة المستهدف مقابل الفعلي) ---
-            st.subheader(f"🔍 مقارنة منتجات الشهر المفصل - {selected_year}")
-            selected_single_month = st.selectbox("اختر الشهر لعرض التحليل المفصل:", VALID_MONTHS, index=0)
+            # --- 4. تفاصيل المبيعات الشهرية للشهر المحدد (دوائر المنتجات 2x2 بجانب أعمدة إجمالي الشهر) ---
+            st.subheader(f"🔍 مقارنة منتجات الشهر المفصل (بطاقات نسب الإنجاز) - {selected_year}")
+            selected_single_month = st.selectbox("اختر الشهر لعرض تفاصيله:", VALID_MONTHS, index=0)
             
             single_month_df = clean_df[
                 (clean_df["Year"] == selected_year) & 
@@ -379,13 +379,13 @@ if sheets_dict is not None:
             sm3.metric("نسبة تحقيق الشهر", f"{sm_ach:.1f}%" if pd.notna(sm_ach) else "—")
             sm4.metric("الفارق (Variance)", f"{sm_var:+,.2f}" if pd.notna(sm_var) else "—")
 
-            st.markdown("---")
+            st.markdown(f"**تحليل شهر {selected_single_month} (المنتجات مقابل إجمالي أعمدة الشهر):**")
+            
+            # قسمنا الشاشة إلى قسمين: دوائر المنتجات 2x2 على اليسار، وأعمدة الهدف مقابل الفعلي للشهر على اليمين
+            col_m_left, col_m_right = st.columns([1.5, 1])
 
-            # تقسيم قسم الشهر المفصل إلى جزأين جنباً إلى جنب: الدوائر الشبكية (2×2) + رسم الأعمدة للمستهدف مقابل الفعلي للشهر
-            month_col_left, month_col_right = st.columns([1.5, 1])
-
-            with month_col_left:
-                st.markdown(f"##### 🎯 نسب تحقيق منتجات شهر {selected_single_month}")
+            with col_m_left:
+                st.markdown("##### نسب الإنجاز للمنتجات بالشهر")
                 for row_idx in range(2):
                     m_d_cols = st.columns(2)
                     for col_idx in range(2):
@@ -400,18 +400,18 @@ if sheets_dict is not None:
                             with m_d_cols[col_idx]:
                                 st.plotly_chart(create_donut_chart(p_pct, prod_colors[prod], product_name=prod, actual_val=p_a, target_val=p_t), use_container_width=True, config={'displayModeBar': False})
 
-            with month_col_right:
-                st.markdown(f"##### 📊 المستهدف مقابل الفعلي لشهر {selected_single_month}")
+            with col_m_right:
+                st.markdown(f"##### 📊 إجمالي مبيعات شهر {selected_single_month}")
                 fig_month_bar = go.Figure()
                 fig_month_bar.add_trace(go.Bar(
-                    x=single_month_enriched["Product"], y=single_month_enriched["Target"],
+                    x=[selected_single_month], y=[sm_target],
                     name="المستهدف", marker_color=COLORS["navy_blue"],
-                    text=single_month_enriched["Target"].round(2), textposition="auto"
+                    text=[f"المستهدف: {sm_target:,.2f}"], textposition="auto"
                 ))
                 fig_month_bar.add_trace(go.Bar(
-                    x=single_month_enriched["Product"], y=single_month_enriched["Actual"],
+                    x=[selected_single_month], y=[sm_actual if pd.notna(sm_actual) else 0],
                     name="الفعلي", marker_color=COLORS["teal"],
-                    text=single_month_enriched["Actual"].round(2), textposition="auto"
+                    text=[f"الفعلي: {sm_actual:,.2f}<br>({sm_ach:.1f}%)" if pd.notna(sm_actual) else "غير مسجل"], textposition="auto"
                 ))
                 fig_month_bar.update_layout(
                     barmode="group",
