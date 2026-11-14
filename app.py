@@ -384,8 +384,18 @@ def render_panel(title, period, data, key, icon="📊", full_width=False):
                             key=f"{key}_{product}"
                         )
 
+def parse_excel_date(series):
+    """دالة ذكية لتحويل تواريخ Excel (سواء كانت نصوص أو أرقام تسلسلية) إلى تواريخ حقيقية بدقة"""
+    parsed = pd.to_datetime(series, errors="coerce")
+    numeric_vals = pd.to_numeric(series, errors="coerce")
+    if parsed.notna().sum() < len(series) * 0.1 and numeric_vals.notna().sum() > 0:
+        converted = pd.to_datetime(numeric_vals, unit="D", origin="1899-12-30", errors="coerce")
+        if converted.notna().sum() > parsed.notna().sum():
+            parsed = converted
+    return parsed
+
 def daily_data_from_sheet(sheets):
-    """سحب البيانات من شيت Data بالاعتماد على الأعمدة: D (مبلغ المبيعات), I (إجمالي المبيعات), J (التاريخ), F (أرقام العملاء)"""
+    """سحب البيانات من شيت Data بالاعتماد على الأعمدة المطلوبة: D (مبلغ المبيعات), I (إجمالي المبيعات), J (التاريخ), F (أرقام العملاء)"""
     name = next((n for n in sheets if n.strip().lower() == "data"), None)
     if not name:
         return None
@@ -393,15 +403,11 @@ def daily_data_from_sheet(sheets):
     if df.shape[1] < 10:
         return None
     
-    parsed = pd.to_datetime(df.iloc[:, 9], errors="coerce") # العمود J (التاريخ)
-    if parsed.notna().sum() == 0 and pd.api.types.is_numeric_dtype(df.iloc[:, 9]):
-        parsed = pd.to_datetime(df.iloc[:, 9], unit="D", origin="1899-12-30", errors="coerce")
-        
     res = pd.DataFrame()
-    res["Parsed_Date"] = parsed
-    res["Amount"] = pd.to_numeric(df.iloc[:, 3], errors="coerce")       # العمود D
-    res["Total_I"] = pd.to_numeric(df.iloc[:, 8], errors="coerce")     # العمود I
-    res["Customer"] = df.iloc[:, 5]                                    # العمود F
+    res["Parsed_Date"] = parse_excel_date(df.iloc[:, 9]) # العمود J (التاريخ)
+    res["Amount"] = pd.to_numeric(df.iloc[:, 3], errors="coerce")       # العمود D (مبلغ المبيعات)
+    res["Total_I"] = pd.to_numeric(df.iloc[:, 8], errors="coerce")     # العمود I (إجمالي المبيعات)
+    res["Customer"] = df.iloc[:, 5]                                    # العمود F (أرقام العملاء)
     
     return res.dropna(subset=["Parsed_Date"]).copy()
 
@@ -504,7 +510,7 @@ with daily_col:
     if daily_df is not None and not daily_df.empty:
         dy_filtered = daily_df[daily_df.Parsed_Date.dt.year == year].copy()
         if dy_filtered.empty:
-            dy_filtered = daily_df.copy()  # Fallback لتجنب الفراغ إذا كانت السنة في شيت Data مختلفة
+            dy_filtered = daily_df.copy()  # Fallback لتجنب الفراغ إذا كانت السنة مختلفة في شيت Data
             
         if not dy_filtered.empty:
             dy_filtered["Date_Only"] = dy_filtered.Parsed_Date.dt.date
