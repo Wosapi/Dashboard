@@ -54,7 +54,7 @@ TEXT = {
         "select_quarter": "🗓️ اختر الربع",
         "select_month": "📅 اختر الشهر",
         "sales_count": "عدد العمليات",
-        "total_i": "إجمالي الكمية/القيمة",
+        "total_i": "إجمالي الكمية (Total Quantities)",
         "customer_count": "عدد العملاء",
         "total_amount": "مبلغ المبيعات (SAR)",
         "period_display": "📅 الفترة النشطة:",
@@ -92,7 +92,7 @@ TEXT = {
         "select_quarter": "🗓️ Select quarter",
         "select_month": "📅 Select month",
         "sales_count": "Transactions",
-        "total_i": "Total (Col I)",
+        "total_i": "Total Quantities",
         "customer_count": "Customers",
         "total_amount": "Sales Amount (SAR)",
         "period_display": "📅 Active Period:",
@@ -418,16 +418,13 @@ def parse_excel_date(series, target_year=2026):
     return parsed
 
 def daily_data_from_sheet(sheets, active_year):
-    """البحث المرن عن شيت البيانات واستخراج الأعمدة بأمان تام"""
-    # البحث عن اسم الشيت بشكل مرن (يتجاهل الفروقات في الحروف أو المسافات)
+    """استخراج بيانات شيت Data باستخدام أسماء الأعمدة المحددة تماماً من الصورة"""
     sheet_name = None
     for n in sheets:
         clean_n = n.strip().lower()
         if "data" in clean_n or "بيانات" in clean_n:
             sheet_name = n
             break
-    
-    # إذا لم يوجد اسم مطابق، نأخذ أول شيت في الملف افتراضياً
     if not sheet_name and len(sheets) > 0:
         sheet_name = list(sheets.keys())[0]
         
@@ -435,34 +432,36 @@ def daily_data_from_sheet(sheets, active_year):
         return None
         
     df = sheets[sheet_name].copy()
-    if df.empty or df.shape[1] < 4:
+    if df.empty:
         return None
     
-    col_date, col_amount, col_total_i, col_customer = None, None, None, None
+    # البحث عن الأعمدة بالأسماء الدقيقة الظاهرة في شيت Data
+    col_date, col_amount, col_total_q, col_customer = None, None, None, None
     
     for c in df.columns:
-        c_str = str(c).lower().strip()
-        if any(x in c_str for x in ["date", "التاريخ"]):
+        c_str = str(c).strip().lower()
+        if c_str == "date":
             col_date = c
-        elif any(x in c_str for x in ["amount", "مبلغ", "المبيعات"]):
+        elif c_str == "amount":
             col_amount = c
-        elif any(x in c_str for x in ["total", "إجمالي", "quanti", "كمية"]):
-            col_total_i = c
-        elif any(x in c_str for x in ["customer", "عميل", "العملاء"]):
-            col_customer = c
+        elif "total quant" in c_str:
+            col_total_q = c
+        elif "customer - no" in c_str or "customer" in c_str:
+            if not col_customer:
+                col_customer = c
 
     res = pd.DataFrame()
     
-    # الاعتماد على الأعمدة المكتشفة أو الفهارس البديلة الآمنة بناءً على صور ملفك
-    res["Parsed_Date"] = parse_excel_date(df[col_date] if col_date else df.iloc[:, min(9, df.shape[1]-1)], target_year=active_year)
-    res["Amount"] = pd.to_numeric(df[col_amount] if col_amount else df.iloc[:, min(3, df.shape[1]-1)], errors="coerce")
-    res["Total_I"] = pd.to_numeric(df[col_total_i] if col_total_i else df.iloc[:, min(8, df.shape[1]-1)], errors="coerce")
-    res["Customer"] = df[col_customer] if col_customer else df.iloc[:, min(5, df.shape[1]-1)]
+    # ربط الأعمدة الفعلية أو الاحتياط الفهرسي بناءً على تخطيط ملفك
+    res["Parsed_Date"] = parse_excel_date(df[col_date] if col_date and col_date in df.columns else df.iloc[:, 8], target_year=active_year)
+    res["Amount"] = pd.to_numeric(df[col_amount] if col_amount and col_amount in df.columns else df.iloc[:, 2], errors="coerce")
+    res["Total_I"] = pd.to_numeric(df[col_total_q] if col_total_q and col_total_q in df.columns else df.iloc[:, 7], errors="coerce")
+    res["Customer"] = df[col_customer] if col_customer and col_customer in df.columns else df.iloc[:, 4]
     
     # 1. إزالة الصفوف التي ليس لها تاريخ صحيح
     res = res.dropna(subset=["Parsed_Date"]).copy()
     
-    # 2. استبعاد الصفوف الوهمية أو الفارغة بالكامل
+    # 2. استبعاد الصفوف الفارغة أو الوهمية التي لا تحتوي على مبيعات حقيقية
     has_customer = res["Customer"].notna() & (res["Customer"].astype(str).str.strip() != "") & (res["Customer"].astype(str).str.strip() != "nan")
     has_amount = res["Amount"].notna() & (res["Amount"] != 0)
     has_qty = res["Total_I"].notna() & (res["Total_I"] != 0)
@@ -557,7 +556,7 @@ with quarter_col:
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# الصف الثاني: تحليل الشهر بجانب جدول تحليل المبيعات اليومية المرن من شيت Data
+# الصف الثاني: تحليل الشهر بجانب جدول تحليل المبيعات اليومية من شيت Data
 month_col, daily_col = st.columns(2, gap="medium")
 
 with month_col:
@@ -640,7 +639,7 @@ with daily_col:
         else:
             st.warning(t["no_data"])
     else:
-        st.info("ℹ️ لم يتم العثور على شيت البيانات أو أن الأعمدة غير متوفرة.")
+        st.info("ℹ️ لم يتم العثور على بيانات المبيعات اليومية بشكل صحيح.")
 
 st.markdown("<hr>", unsafe_allow_html=True)
 st.markdown(f'<div class="section-heading">📋 {t["tables"]}</div>', unsafe_allow_html=True)
