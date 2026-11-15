@@ -92,6 +92,7 @@ TEXT = {
         "product_perf": "أداء المنتجات",
         "total_chart": "الإجمالي (فعلي مقابل مستهدف)",
         "daily": "جدول تحليل المبيعات اليومية",
+        "daily_total": "إجمالي المبيعات اليومية",
         "tables": "الجداول التحليلية",
         "export": "تصدير التقارير",
         "download": "تحميل التقرير الشامل (Excel)",
@@ -134,6 +135,7 @@ TEXT = {
         "product_perf": "Products Performance",
         "total_chart": "Total (Actual vs Target)",
         "daily": "Daily Sales Table Breakdown",
+        "daily_total": "Daily Sales Total",
         "tables": "Detailed Analytical Tables",
         "export": "Export Reports",
         "download": "Download Comprehensive Report (Excel)",
@@ -1258,6 +1260,8 @@ with month_col:
         key="month_choice",
         icon="📅"
     )
+    # مكان إجمالي المبيعات اليومية (يُملأ لاحقاً من جدول المبيعات اليومية)
+    totals_slot = st.container()
 
 with daily_col:
     with st.container(key="card_daily"):
@@ -1378,11 +1382,13 @@ with daily_col:
                         height=260
                     )
 
-                    st.markdown("#### 📊 إجمالي الفترة المعروضة")
-                    m1, m2, m3 = st.columns(3)
-                    m1.metric(t["sales_count"], f"{len(daily_view):,}")
-                    m2.metric(t["total_i"], num(daily_view["Total_I"].sum(min_count=1)))
-                    m3.metric(t["total_amount"], num(daily_view["Amount"].sum(min_count=1)))
+                    with totals_slot:
+                        with st.container(key="card_daily_totals"):
+                            st.markdown(f"#### 📊 {t['daily_total']}")
+                            m1, m2, m3 = st.columns(3)
+                            m1.metric(t["sales_count"], f"{len(daily_view):,}")
+                            m2.metric(t["total_i"], num(daily_view["Total_I"].sum(min_count=1)))
+                            m3.metric(t["total_amount"], num(daily_view["Amount"].sum(min_count=1)))
                 else:
                     month_label = MONTH_AR[month] if lang == "ar" else month
                     if filter_mode == "الشهر كاملاً" and is_holiday:
