@@ -1,5 +1,6 @@
 import io
 import json
+import re
 from datetime import timedelta
 import numpy as np
 import pandas as pd
@@ -89,8 +90,8 @@ TEXT = {
         "quarter": "تحليل الربع السنوي",
         "month": "تحليل الشهر",
         "variance": "⚖️ الفرق",
-        "product_perf": "أداء المنتجات",
-        "total_chart": "الإجمالي (فعلي مقابل مستهدف)",
+        "product_perf": "أداء المنتجات بالطن",
+        "total_chart": "الإجمالي بالطن (فعلي مقابل مستهدف)",
         "daily": "جدول تحليل المبيعات اليومية",
         "daily_total": "إجمالي المبيعات اليومية",
         "qty_title": "كميات المنتجات بالكرتون",
@@ -135,8 +136,8 @@ TEXT = {
         "quarter": "Quarter Analysis",
         "month": "Month Analysis",
         "variance": "⚖️ Variance",
-        "product_perf": "Products Performance",
-        "total_chart": "Total (Actual vs Target)",
+        "product_perf": "Products Performance (tons)",
+        "total_chart": "Total in tons (Actual vs Target)",
         "daily": "Daily Sales Table Breakdown",
         "daily_total": "Daily Sales Total",
         "qty_title": "Product Quantities (Cartons)",
@@ -753,21 +754,30 @@ def donut_html(actual, target, product):
     )
 
 
-def qty_boxes_html(sub_data):
-    """5 مربعات: كمية كل منتج (الفعلي من شيت Target) + إجمالي الكمية للشهر."""
+def qty_boxes_html(values):
+    """5 مربعات: كراتين كل منتج (من شيت Data) + إجمالي الكراتين للشهر."""
+    values = values or {}
+
+    def qnum(v):
+        return "—" if pd.isna(v) else f"{v:,.0f}"
+
+    present = [values.get(p, np.nan) for p in PRODUCTS]
+    present = [v for v in present if pd.notna(v)]
+    total_qty = sum(present) if present else np.nan
+
     boxes = []
     for product in PRODUCTS:
-        val = total(sub_data[sub_data.Product == product].Actual)
+        val = values.get(product, np.nan)
         boxes.append(
             f'<div class="qty-box" style="--c:{PCOLORS[product]}">'
             f'<div class="qty-name">{product}</div>'
-            f'<div class="qty-val">{num(val)}</div>'
+            f'<div class="qty-val">{qnum(val)}</div>'
             f'<div class="qty-unit">{t["qty_unit"]}</div></div>'
         )
     boxes.append(
         f'<div class="qty-box qty-total" style="--c:{C["teal"]}">'
         f'<div class="qty-name">{t["qty_total"]}</div>'
-        f'<div class="qty-val">{num(total(sub_data.Actual))}</div>'
+        f'<div class="qty-val">{qnum(total_qty)}</div>'
         f'<div class="qty-unit">{t["qty_unit"]}</div></div>'
     )
     return f'<div class="qty-grid">{"".join(boxes)}</div>'
@@ -931,7 +941,10 @@ def render_panel_with_selector(title, options, default_idx, year_df, filter_col,
         # مربعات الكميات بالكرتون (تتبع الشهر المختار) — في بانل تحليل الشهر فقط
         if filter_col == "Month":
             st.caption(f"📦 {t['qty_title']} · {selected_val}")
-            st.markdown(qty_boxes_html(sub_data), unsafe_allow_html=True)
+            qty = month_cartons(year, selected_val)
+            if qty is None and carton_error:
+                st.caption(f"⚠️ {carton_error}")
+            st.markdown(qty_boxes_html(qty), unsafe_allow_html=True)
 
     return selected_val
 
@@ -954,6 +967,10 @@ def find_column(df, possible_names):
 
 
 def parse_excel_date(series):
+    # تواريخ إكسل الحقيقية تأتي جاهزة كـ datetime: نستخدمها كما هي دون إعادة تفسير
+    if pd.api.types.is_datetime64_any_dtype(series):
+        return pd.to_datetime(series, errors="coerce")
+
     result = pd.Series(pd.NaT, index=series.index, dtype="datetime64[ns]")
     numeric = pd.to_numeric(series, errors="coerce")
     numeric_mask = numeric.notna() & (numeric > 20000) & (numeric < 80000)
@@ -1033,6 +1050,68 @@ def daily_data_from_sheet(sheets):
     res["Month"] = res["Parsed_Date"].dt.strftime("%b")
 
     return res.reset_index(drop=True), None
+
+
+# أعمدة الكراتين في شيت Data (بترقيم الأعمدة من 0: A=0 ... J=9):
+# Min = J,K | Syn = L | DEO = M,N | Fluids = P,Q
+CARTON_COLS = {"Min": [9, 10], "Syn": [11], "DEO": [12, 13], "Fluids": [15, 16]}
+
+
+def _base_header(name):
+    """اسم العمود بدون لاحقة التكرار التي يضيفها pandas (Min.1 -> min)."""
+    return re.sub(r"\.\d+$", "", str(name).strip()).lower()
+
+
+def product_cartons_from_sheet(sheets):
+    """كراتين كل منتج لكل يوم من شيت Data (مجموع أعمدة المنتج)."""
+    sheet_name = next(
+        (name for name in sheets if clean_column_name(name) in ["data", "بيانات"]),
+        None
+    )
+    if sheet_name is None:
+        return None, "لم يتم العثور على شيت Data."
+
+    df = sheets[sheet_name]
+    date_col = find_column(df, ["Date", "التاريخ"])
+    if date_col is None:
+        return None, "عمود Date غير موجود في شيت Data."
+
+    out = pd.DataFrame({"Parsed_Date": parse_excel_date(df[date_col])})
+
+    for product, idxs in CARTON_COLS.items():
+        # 1) حسب موقع العمود (J,K / L / M,N / P,Q) مع التحقق من اسم العنوان
+        cols = [
+            df.columns[i] for i in idxs
+            if i < len(df.columns) and _base_header(df.columns[i]) == product.lower()
+        ]
+        # 2) إن لم يتطابق الموقع نبحث بالاسم
+        if len(cols) != len(idxs):
+            cols = [c for c in df.columns if _base_header(c) == product.lower()]
+
+        if cols:
+            vals = pd.concat([clean_numeric(df[c]) for c in cols], axis=1)
+            out[product] = vals.sum(axis=1, min_count=1)
+        else:
+            out[product] = np.nan
+
+    out = out.dropna(subset=["Parsed_Date"]).copy()
+    out["Year"] = out["Parsed_Date"].dt.year
+    out["Month_Num"] = out["Parsed_Date"].dt.month
+    return out.reset_index(drop=True), None
+
+
+def month_cartons(year_value, month_abbr):
+    """كراتين المنتجات المختارة في الشهر المحدد (dict) أو None عند تعذر القراءة."""
+    if carton_df is None:
+        return None
+    month_num = MONTHS.index(month_abbr) + 1
+    sub = carton_df[
+        (carton_df["Year"] == int(year_value)) & (carton_df["Month_Num"] == month_num)
+    ]
+    return {
+        p: (total(sub[p]) if p in chosen_products else np.nan)
+        for p in PRODUCTS
+    }
 
 
 # =========================================================
@@ -1244,6 +1323,9 @@ filtered = year_data[year_data.Quarter.isin(chosen_quarters)].copy()
 
 # الأشهر التي لا توجد بها مبيعات (إجازة)
 HOLIDAY_MONTHS = find_holiday_months(year_data)
+
+# كراتين المنتجات من شيت Data (لمربعات تحليل الشهر)
+carton_df, carton_error = product_cartons_from_sheet(sheets)
 
 
 # =========================================================
