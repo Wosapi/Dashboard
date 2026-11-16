@@ -94,6 +94,7 @@ TEXT = {
         "total_chart": "الإجمالي بالطن (فعلي مقابل مستهدف)",
         "daily": "جدول تحليل المبيعات اليومية",
         "daily_total": "إجمالي المبيعات اليومية",
+        "active_customers": "العملاء النشطة",
         "qty_title": "كميات المنتجات بالكرتون",
         "qty_unit": "كرتون",
         "qty_total": "إجمالي الكمية",
@@ -140,6 +141,7 @@ TEXT = {
         "total_chart": "Total in tons (Actual vs Target)",
         "daily": "Daily Sales Table Breakdown",
         "daily_total": "Daily Sales Total",
+        "active_customers": "Active Customers",
         "qty_title": "Product Quantities (Cartons)",
         "qty_unit": "cartons",
         "qty_total": "Total Quantity",
@@ -1549,7 +1551,7 @@ with daily_col:
                         with st.container(key="card_daily_totals"):
                             st.markdown(f"#### 📊 {t['daily_total']}")
                             m1, m2, m3 = st.columns(3)
-                            m1.metric(t["sales_count"], f"{len(daily_view):,}")
+                            m1.metric(t["active_customers"], f"{daily_view['Customer_No'].nunique():,}")
                             m2.metric(t["total_i"], num(daily_view["Total_I"].sum(min_count=1)))
                             m3.metric(t["total_amount"], num(daily_view["Amount"].sum(min_count=1)))
                 else:
