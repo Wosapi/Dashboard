@@ -93,6 +93,9 @@ TEXT = {
         "total_chart": "الإجمالي (فعلي مقابل مستهدف)",
         "daily": "جدول تحليل المبيعات اليومية",
         "daily_total": "إجمالي المبيعات اليومية",
+        "qty_title": "كميات المنتجات بالكرتون",
+        "qty_unit": "كرتون",
+        "qty_total": "إجمالي الكمية",
         "tables": "الجداول التحليلية",
         "export": "تصدير التقارير",
         "download": "تحميل التقرير الشامل (Excel)",
@@ -136,6 +139,9 @@ TEXT = {
         "total_chart": "Total (Actual vs Target)",
         "daily": "Daily Sales Table Breakdown",
         "daily_total": "Daily Sales Total",
+        "qty_title": "Product Quantities (Cartons)",
+        "qty_unit": "cartons",
+        "qty_total": "Total Quantity",
         "tables": "Detailed Analytical Tables",
         "export": "Export Reports",
         "download": "Download Comprehensive Report (Excel)",
@@ -408,6 +414,56 @@ div[data-testid="stPlotlyChart"] .main-svg {{
     direction: ltr;
     white-space: nowrap;
     margin-top: 2px;
+}}
+
+/* ---------- مربعات الكميات بالكرتون ---------- */
+.qty-grid {{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(76px, 1fr));
+    gap:8px;
+    margin:4px 0 6px;
+}}
+
+.qty-box {{
+    background:{C['white']};
+    border:1px solid {C['border']};
+    border-top:4px solid var(--c);
+    border-radius:12px;
+    padding:9px 6px 8px;
+    text-align:center;
+    box-shadow:0 2px 8px rgba(11,37,69,.06);
+}}
+
+.qty-name {{
+    font-size:.74rem;
+    font-weight:700;
+    color:{C['muted']};
+}}
+
+.qty-val {{
+    font-size:1.12rem;
+    font-weight:800;
+    color:{C['navy']};
+    direction:ltr;
+    line-height:1.35;
+}}
+
+.qty-unit {{
+    font-size:.64rem;
+    font-weight:600;
+    color:{C['muted']};
+}}
+
+.qty-total {{
+    background:linear-gradient(100deg,{C['navy']},{C['navy2']});
+    border-color:{C['navy']};
+    border-top-color:{C['teal']};
+}}
+
+.qty-total .qty-name,
+.qty-total .qty-val,
+.qty-total .qty-unit {{
+    color:#FFFFFF;
 }}
 
 /* ---------- Dataframe / tabs / radio ---------- */
@@ -697,6 +753,26 @@ def donut_html(actual, target, product):
     )
 
 
+def qty_boxes_html(sub_data):
+    """5 مربعات: كمية كل منتج (الفعلي من شيت Target) + إجمالي الكمية للشهر."""
+    boxes = []
+    for product in PRODUCTS:
+        val = total(sub_data[sub_data.Product == product].Actual)
+        boxes.append(
+            f'<div class="qty-box" style="--c:{PCOLORS[product]}">'
+            f'<div class="qty-name">{product}</div>'
+            f'<div class="qty-val">{num(val)}</div>'
+            f'<div class="qty-unit">{t["qty_unit"]}</div></div>'
+        )
+    boxes.append(
+        f'<div class="qty-box qty-total" style="--c:{C["teal"]}">'
+        f'<div class="qty-name">{t["qty_total"]}</div>'
+        f'<div class="qty-val">{num(total(sub_data.Actual))}</div>'
+        f'<div class="qty-unit">{t["qty_unit"]}</div></div>'
+    )
+    return f'<div class="qty-grid">{"".join(boxes)}</div>'
+
+
 def total_bar_chart(period_label, actual, target, height=235):
     fig = go.Figure()
 
@@ -851,6 +927,11 @@ def render_panel_with_selector(title, options, default_idx, year_df, filter_col,
                 for product in PRODUCTS
             )
             st.markdown(f'<div class="dn-grid">{cells}</div>', unsafe_allow_html=True)
+
+        # مربعات الكميات بالكرتون (تتبع الشهر المختار) — في بانل تحليل الشهر فقط
+        if filter_col == "Month":
+            st.caption(f"📦 {t['qty_title']} · {selected_val}")
+            st.markdown(qty_boxes_html(sub_data), unsafe_allow_html=True)
 
     return selected_val
 
