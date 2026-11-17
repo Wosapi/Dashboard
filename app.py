@@ -1092,6 +1092,8 @@ def daily_data_from_sheet(sheets):
     # E = نوع الفاتورة (Cash/Credit) ، B = علامة السداد في نفس صف الفاتورة
     res["Pay_Type"] = df.iloc[:, 4].map(normalize_pay_type) if df.shape[1] > 4 else "غير محدد"
     res["Paid_Flag"] = df.iloc[:, 1].map(paid_flag) if df.shape[1] > 1 else False
+    # العمود B (Paying) = المبلغ المسدّد في نفس صف الفاتورة (قد يكون جزءاً من المبلغ)
+    res["Paid_Amt"] = clean_numeric(df.iloc[:, 1]).fillna(0.0) if df.shape[1] > 1 else 0.0
 
     res = res.dropna(subset=["Parsed_Date"]).copy()
 
@@ -1191,6 +1193,9 @@ def build_customer_tables(view):
     d["_cash"] = d["Pay_Type"].eq("نقد")
     d["_credit"] = d["Pay_Type"].eq("آجل")
     d["Paid_Flag"] = d["Paid_Flag"].astype(bool)
+    if "Paid_Amt" not in d.columns:
+        d["Paid_Amt"] = 0.0
+    d["Paid_Amt"] = d["Paid_Amt"].fillna(0.0)
 
     d["Customer_Key"] = d["Customer_No"].fillna(d["Customer_Name"]).fillna("غير محدد")
 
@@ -1209,6 +1214,7 @@ def build_customer_tables(view):
             Cash_Any=("_cash", "any"),
             Credit_Any=("_credit", "any"),
             Paid_Any=("Paid_Flag", "any"),
+            Paid_Raw=("Paid_Amt", "sum"),
         )
     )
     invoices["Invoice_Show"] = invoices["Invoice_Key"].where(
@@ -1220,14 +1226,17 @@ def build_customer_tables(view):
     invoices["Pay_Type"] = np.where(
         invoices["Credit_Any"], "آجل", np.where(invoices["Cash_Any"], "نقد", "غير محدد")
     )
-    invoices["Paid"] = invoices["Paid_Any"].astype(bool)
     amt = invoices["Amount"].fillna(0.0)
     is_credit = invoices["Pay_Type"].eq("آجل")
     is_cash = invoices["Pay_Type"].eq("نقد")
+    # السداد = مبلغ العمود B في صف الفاتورة (لا يتجاوز مبلغها). المتبقي = المديونية
+    paid_amt = np.minimum(invoices["Paid_Raw"].fillna(0.0).clip(lower=0.0), amt)
     invoices["Cash_Amount"] = amt.where(is_cash, 0.0)
     invoices["Credit_Amount"] = amt.where(is_credit, 0.0)
-    invoices["Paid_Amount"] = amt.where(is_credit & invoices["Paid"], 0.0)
-    invoices["Debt"] = amt.where(is_credit & ~invoices["Paid"], 0.0)
+    invoices["Paid_Amount"] = paid_amt.where(is_credit, 0.0)
+    invoices["Debt"] = (amt - paid_amt).where(is_credit, 0.0)
+    invoices["Paid"] = is_credit & (invoices["Debt"] <= 0.005) & (invoices["Paid_Amount"] > 0)
+    invoices["Partial"] = is_credit & (invoices["Debt"] > 0.005) & (invoices["Paid_Amount"] > 0)
 
     customers = (
         invoices.groupby("Customer_Key", as_index=False, sort=False)
@@ -1250,12 +1259,14 @@ def build_customer_tables(view):
     return invoices, customers
 
 
-def invoice_type_label(pay_type, paid):
+def invoice_type_label(pay_type, paid, partial=False):
     """نص نوع الفاتورة في الكشف: نقد / آجل · مسدّد / آجل · مستحق."""
     if pay_type == "نقد":
         return "نقد"
     if pay_type == "آجل":
-        return "آجل · مسدّد" if paid else "آجل · مستحق"
+        if paid:
+            return "آجل · مسدّد"
+        return "آجل · جزئي" if partial else "آجل · مستحق"
     return "—"
 
 
@@ -1267,7 +1278,7 @@ def build_statement_table(inv):
     stmt = pd.DataFrame({
         "التاريخ": inv["Date"].dt.strftime("%Y-%m-%d"),
         "رقم الفاتورة": inv["Invoice_Show"].astype(str),
-        "النوع": [invoice_type_label(p, bool(x)) for p, x in zip(inv["Pay_Type"], inv["Paid"])],
+        "النوع": [invoice_type_label(p, bool(x), bool(y)) for p, x, y in zip(inv["Pay_Type"], inv["Paid"], inv["Partial"])],
         "الكمية (كرتون)": inv["Quantity"],
         "المبلغ (SAR)": inv["Amount"],
         "الإجمالي التراكمي (SAR)": inv["Cumulative"],
@@ -1322,6 +1333,7 @@ tbody tr:nth-child(even) td { background:#F6F9FC; }
 .bd { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; }
 .b-cash { background:#E3F6F3; color:#0B7F73; }
 .b-paid { background:#E6F4EA; color:#1E7B3A; }
+.b-part { background:#FEF3C7; color:#B45309; }
 .b-due { background:#FDE8E8; color:#B42318; }
 .kpi.kd-due { border-top-color:#D92D20; } .kpi.kd-due .v { color:#B42318; }
 .kpi.kd-ok { border-top-color:#16A34A; } .kpi.kd-ok .v { color:#15803D; }
@@ -1437,7 +1449,7 @@ def statement_sheet_html(cust_name, cust_no, d_from, d_to, n_inv, qty, acct, stm
     esc = html.escape
 
     def badge(label):
-        cls = {"نقد": "b-cash", "آجل · مسدّد": "b-paid", "آجل · مستحق": "b-due"}.get(label)
+        cls = {"نقد": "b-cash", "آجل · مسدّد": "b-paid", "آجل · مستحق": "b-due", "آجل · جزئي": "b-part"}.get(label)
         return f"<span class='bd {cls}'>{esc(label)}</span>" if cls else esc(label)
 
     rows = []
@@ -1644,7 +1656,7 @@ def render_customer_statement(all_df, default_view, year_value):
                 "اسم العميل": invoices["Customer_Name"].astype(str),
                 "التاريخ": invoices["Date"].dt.strftime("%Y-%m-%d"),
                 "رقم الفاتورة": invoices["Invoice_Show"].astype(str),
-                "النوع": [invoice_type_label(p, bool(x)) for p, x in zip(invoices["Pay_Type"], invoices["Paid"])],
+                "النوع": [invoice_type_label(p, bool(x), bool(y)) for p, x, y in zip(invoices["Pay_Type"], invoices["Paid"], invoices["Partial"])],
                 "الكمية (كرتون)": invoices["Quantity"],
                 "المبلغ (SAR)": invoices["Amount"],
             }).sort_values(["اسم العميل", "التاريخ"])
