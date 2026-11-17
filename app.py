@@ -1089,11 +1089,13 @@ def daily_data_from_sheet(sheets):
     res["Customer_Name"] = df[customer_name_col].astype("string").str.strip() if customer_name_col else pd.NA
     res["Invoice_No"] = df[invoice_col].astype("string").str.strip() if invoice_col else pd.NA
 
-    # E = نوع الفاتورة (Cash/Credit) ، B = علامة السداد في نفس صف الفاتورة
+    # E = نوع الفاتورة (Cash/Credit)
     res["Pay_Type"] = df.iloc[:, 4].map(normalize_pay_type) if df.shape[1] > 4 else "غير محدد"
-    res["Paid_Flag"] = df.iloc[:, 1].map(paid_flag) if df.shape[1] > 1 else False
-    # العمود B (Paying) = المبلغ المسدّد في نفس صف الفاتورة (قد يكون جزءاً من المبلغ)
-    res["Paid_Amt"] = clean_numeric(df.iloc[:, 1]).fillna(0.0) if df.shape[1] > 1 else 0.0
+    # عمود السداد (A) = المبلغ المسدّد في نفس صف الفاتورة (قد يكون جزءاً من المبلغ)
+    pay_col = find_column(df, ["Paying", "Paid", "السداد", "المسدد"])
+    pay_series = df[pay_col] if pay_col is not None else df.iloc[:, 0]
+    res["Paid_Flag"] = pay_series.map(paid_flag)
+    res["Paid_Amt"] = clean_numeric(pay_series).fillna(0.0)
 
     res = res.dropna(subset=["Parsed_Date"]).copy()
 
