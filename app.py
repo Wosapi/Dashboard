@@ -1,3 +1,4 @@
+import html
 import io
 import json
 import re
@@ -467,6 +468,28 @@ div[data-testid="stPlotlyChart"] .main-svg {{
 .qty-total .qty-val,
 .qty-total .qty-unit {{
     color:#FFFFFF;
+}}
+
+/* ---------- كشف حساب العميل ---------- */
+.stmt-banner {{
+    background:linear-gradient(100deg,{C['navy']},{C['navy2']});
+    border-radius:12px;
+    border-inline-start:5px solid {C['teal']};
+    padding:10px 14px;
+    margin:6px 0 10px;
+    color:#FFFFFF;
+}}
+
+.stmt-name {{
+    font-weight:800;
+    font-size:1rem;
+    line-height:1.4;
+}}
+
+.stmt-meta {{
+    font-size:.76rem;
+    color:#CFE0F1;
+    margin-top:2px;
 }}
 
 /* ---------- Dataframe / tabs / radio ---------- */
@@ -1117,6 +1140,204 @@ def month_cartons(year_value, month_abbr):
 
 
 # =========================================================
+# 9b. CUSTOMER STATEMENT (كشف حساب وفواتير العملاء)
+# =========================================================
+
+def build_customer_tables(view):
+    """فواتير العملاء وملخصهم من المبيعات المعروضة (تتبع فلتر الجدول اليومي)."""
+    d = view.copy()
+    for col in ["Customer_No", "Customer_Name", "Invoice_No"]:
+        d[col] = d[col].astype("string").str.strip()
+        d[col] = d[col].replace({"": pd.NA, "nan": pd.NA, "<NA>": pd.NA})
+
+    d["Customer_Key"] = d["Customer_No"].fillna(d["Customer_Name"]).fillna("غير محدد")
+
+    # صف بلا رقم فاتورة يُعامل كفاتورة مستقلة حتى لا تُدمج الصفوف معاً
+    fallback = pd.Series([f"—#{i}" for i in d.index], index=d.index, dtype="string")
+    d["Invoice_Key"] = d["Invoice_No"].where(d["Invoice_No"].notna(), fallback)
+
+    invoices = (
+        d.groupby(["Customer_Key", "Invoice_Key"], as_index=False, sort=False)
+        .agg(
+            Customer_No=("Customer_No", "first"),
+            Customer_Name=("Customer_Name", "first"),
+            Date=("Parsed_Date", "min"),
+            Quantity=("Total_I", lambda s: s.sum(min_count=1)),
+            Amount=("Amount", lambda s: s.sum(min_count=1)),
+        )
+    )
+    invoices["Invoice_Show"] = invoices["Invoice_Key"].where(
+        ~invoices["Invoice_Key"].str.startswith("—#"), "—"
+    )
+    invoices["Customer_Name"] = invoices["Customer_Name"].fillna(invoices["Customer_Key"])
+
+    customers = (
+        invoices.groupby("Customer_Key", as_index=False, sort=False)
+        .agg(
+            Customer_No=("Customer_No", "first"),
+            Customer_Name=("Customer_Name", "first"),
+            Invoices=("Invoice_Key", "nunique"),
+            Quantity=("Quantity", lambda s: s.sum(min_count=1)),
+            Amount=("Amount", lambda s: s.sum(min_count=1)),
+        )
+        .sort_values("Amount", ascending=False, na_position="last")
+        .reset_index(drop=True)
+    )
+    grand = customers["Amount"].sum()
+    customers["Share"] = customers["Amount"] / grand * 100 if grand else np.nan
+    return invoices, customers
+
+
+def build_statement_table(inv):
+    """كشف حساب عميل: الفواتير بالتاريخ + إجمالي تراكمي + صف الإجمالي."""
+    inv = inv.sort_values(["Date", "Invoice_Show"]).reset_index(drop=True)
+    inv["Cumulative"] = inv["Amount"].fillna(0).cumsum()
+
+    stmt = pd.DataFrame({
+        "التاريخ": inv["Date"].dt.strftime("%Y-%m-%d"),
+        "رقم الفاتورة": inv["Invoice_Show"].astype(str),
+        "الكمية (كرتون)": inv["Quantity"],
+        "المبلغ (SAR)": inv["Amount"],
+        "الإجمالي التراكمي (SAR)": inv["Cumulative"],
+    })
+    closing = pd.DataFrame([{
+        "التاريخ": "الإجمالي",
+        "رقم الفاتورة": f"{len(inv):,} فاتورة",
+        "الكمية (كرتون)": inv["Quantity"].sum(min_count=1),
+        "المبلغ (SAR)": inv["Amount"].sum(min_count=1),
+        "الإجمالي التراكمي (SAR)": inv["Cumulative"].iloc[-1],
+    }])
+    return pd.concat([stmt, closing], ignore_index=True)
+
+
+def render_customer_statement(view):
+    """بطاقة كشف حساب وفواتير وإجمالي كميات العملاء — تتبع الفترة المعروضة في الجدول اليومي."""
+    invoices, customers = build_customer_tables(view)
+    d_min, d_max = view["Date_Only"].min(), view["Date_Only"].max()
+    xlsx_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+    with st.container(key="card_statement"):
+        st.markdown('<div class="panel-heading">🧾 كشف حساب وفواتير العملاء</div>', unsafe_allow_html=True)
+        st.caption(
+            f"📆 {d_min} ← {d_max}  ·  👥 {len(customers):,} عميل  ·  🧾 {len(invoices):,} فاتورة"
+        )
+
+        tab_sum, tab_cust = st.tabs(["👥 ملخص العملاء", "🧾 كشف حساب عميل"])
+
+        # ---------- ملخص العملاء ----------
+        with tab_sum:
+            summary_df = pd.DataFrame({
+                "رقم العميل": customers["Customer_No"].fillna("—").astype(str),
+                "اسم العميل": customers["Customer_Name"].astype(str),
+                "الفواتير": customers["Invoices"],
+                "الكمية (كرتون)": customers["Quantity"],
+                "المبلغ (SAR)": customers["Amount"],
+                "% من الإجمالي": customers["Share"],
+            })
+            st.dataframe(
+                summary_df.style.format(
+                    {
+                        "الفواتير": "{:,.0f}",
+                        "الكمية (كرتون)": "{:,.2f}",
+                        "المبلغ (SAR)": "{:,.2f}",
+                        "% من الإجمالي": "{:.1f}%",
+                    },
+                    na_rep="—",
+                ),
+                use_container_width=True,
+                hide_index=True,
+                height=min(420, 35 * (len(summary_df) + 1) + 3),
+            )
+
+            invoices_export = pd.DataFrame({
+                "رقم العميل": invoices["Customer_No"].fillna("—").astype(str),
+                "اسم العميل": invoices["Customer_Name"].astype(str),
+                "التاريخ": invoices["Date"].dt.strftime("%Y-%m-%d"),
+                "رقم الفاتورة": invoices["Invoice_Show"].astype(str),
+                "الكمية (كرتون)": invoices["Quantity"],
+                "المبلغ (SAR)": invoices["Amount"],
+            }).sort_values(["اسم العميل", "التاريخ"])
+
+            st.download_button(
+                "📥 تحميل ملخص العملاء والفواتير (Excel)",
+                data=excel_bytes({"Customers": summary_df, "Invoices": invoices_export}),
+                file_name=f"Customers_Summary_{d_min}_{d_max}.xlsx",
+                mime=xlsx_mime,
+                use_container_width=True,
+                key="dl_customers_summary",
+            )
+
+        # ---------- كشف حساب عميل ----------
+        with tab_cust:
+            labels = {}
+            for row in customers.itertuples():
+                no = row.Customer_No
+                name = str(row.Customer_Name)
+                labels[row.Customer_Key] = (
+                    f"{name} — {no}" if pd.notna(no) and str(no) != name else name
+                )
+
+            chosen = st.selectbox(
+                "🔎 اختر العميل (اكتب للبحث):",
+                list(labels.keys()),
+                format_func=lambda k: labels[k],
+            )
+
+            cust = customers[customers["Customer_Key"] == chosen].iloc[0]
+            inv = invoices[invoices["Customer_Key"] == chosen].copy()
+            stmt = build_statement_table(inv)
+
+            cust_no = "—" if pd.isna(cust["Customer_No"]) else str(cust["Customer_No"])
+            st.markdown(
+                f'<div class="stmt-banner">'
+                f'<div class="stmt-name">👤 {html.escape(str(cust["Customer_Name"]))}</div>'
+                f'<div class="stmt-meta">رقم العميل: {html.escape(cust_no)} · الفترة: {d_min} ← {d_max}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+            k1, k2, k3 = st.columns(3)
+            k1.metric("عدد الفواتير", f"{int(cust['Invoices']):,}")
+            k2.metric("الكمية (كرتون)", num(cust["Quantity"]))
+            k3.metric("المبلغ (SAR)", num(cust["Amount"]))
+
+            last_idx = len(stmt) - 1
+            styled = (
+                stmt.style.format(
+                    {
+                        "الكمية (كرتون)": "{:,.2f}",
+                        "المبلغ (SAR)": "{:,.2f}",
+                        "الإجمالي التراكمي (SAR)": "{:,.2f}",
+                    },
+                    na_rep="—",
+                )
+                .apply(
+                    lambda r: (
+                        [f"font-weight:800; background-color:#E8EEF5; color:{C['navy']}"] * len(r)
+                        if r.name == last_idx else [""] * len(r)
+                    ),
+                    axis=1,
+                )
+            )
+            st.dataframe(
+                styled,
+                use_container_width=True,
+                hide_index=True,
+                height=min(420, 35 * (len(stmt) + 1) + 3),
+            )
+
+            safe_name = re.sub(r"[^\w\-]+", "_", str(cust["Customer_Name"])).strip("_")[:40] or "customer"
+            st.download_button(
+                "📥 تحميل كشف الحساب (Excel)",
+                data=excel_bytes({"Statement": stmt}),
+                file_name=f"Statement_{safe_name}_{d_min}_{d_max}.xlsx",
+                mime=xlsx_mime,
+                use_container_width=True,
+                key="dl_customer_statement",
+            )
+
+
+# =========================================================
 # 10. EXPORT FUNCTION
 # =========================================================
 
@@ -1429,6 +1650,7 @@ with month_col:
     totals_slot = st.container()
 
 with daily_col:
+    statement_view = None  # الفترة المعروضة، تُستخدم في كشف حساب العملاء أسفل الجدول
     with st.container(key="card_daily"):
         st.markdown(f'<div class="panel-heading">📋 {t["daily"]}</div>', unsafe_allow_html=True)
         daily_df, daily_error = daily_data_from_sheet(sheets)
@@ -1554,6 +1776,8 @@ with daily_col:
                             m1.metric(t["active_customers"], f"{daily_view['Customer_No'].nunique():,}")
                             m2.metric(t["total_i"], num(daily_view["Total_I"].sum(min_count=1)))
                             m3.metric(t["total_amount"], num(daily_view["Amount"].sum(min_count=1)))
+
+                    statement_view = daily_view
                 else:
                     month_label = MONTH_AR[month] if lang == "ar" else month
                     if filter_mode == "الشهر كاملاً" and is_holiday:
@@ -1565,6 +1789,10 @@ with daily_col:
                         st.info(f"{t['no_sales_yet']} {month_label}.")
                     else:
                         st.warning("لا توجد مبيعات في التاريخ المحدد.")
+
+    # كشف حساب وفواتير وإجمالي كميات العملاء (تحت الجدول اليومي)
+    if statement_view is not None and not statement_view.empty:
+        render_customer_statement(statement_view)
 
 
 # =========================================================
