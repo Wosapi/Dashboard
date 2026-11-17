@@ -1187,6 +1187,9 @@ def month_cartons(year_value, month_abbr):
 # 9b. CUSTOMER STATEMENT (كشف حساب وفواتير العملاء)
 # =========================================================
 
+CREDIT_MAX_DAYS = 30  # أقصى مدة سداد للفاتورة الآجلة (يوم)
+
+
 def build_customer_tables(view):
     """فواتير العملاء وملخصهم (سحبيات / نقد / آجل / مسدّد / مديونية) من المبيعات المعروضة."""
     d = view.copy()
@@ -1602,7 +1605,7 @@ def render_customer_statement(all_df, default_view, year_value):
         invoices, customers = build_customer_tables(view)
 
         # المديونية والسحبيات الإجمالية لكل عميل عبر كل الفترات (الرصيد الفعلي لا يتأثر بفلتر التاريخ)
-        _, customers_all = build_customer_tables(all_df)
+        invoices_all, customers_all = build_customer_tables(all_df)
         all_map = customers_all.set_index("Customer_Key")
         customers["Debt_All"] = customers["Customer_Key"].map(all_map["Debt"]).fillna(0.0)
         customers["Amount_All"] = customers["Customer_Key"].map(all_map["Amount"]).fillna(0.0)
@@ -1613,7 +1616,9 @@ def render_customer_statement(all_df, default_view, year_value):
             f"  ·  💳 مديونية العملاء: {num(customers['Debt_All'].sum())}"
         )
 
-        tab_sum, tab_cust = st.tabs(["👥 ملخص العملاء", "🧾 كشف حساب عميل"])
+        tab_sum, tab_cust, tab_credit = st.tabs(
+            ["👥 ملخص العملاء", "🧾 كشف حساب عميل", "💳 أرصدة العملاء الآجل"]
+        )
 
         # ---------- ملخص العملاء ----------
         with tab_sum:
@@ -1721,6 +1726,114 @@ def render_customer_statement(all_df, default_view, year_value):
                 height=820 + 32 * len(stmt),
                 scrolling=False,
             )
+
+        # ---------- أرصدة العملاء الآجل + تنبيهات تجاوز المهلة ----------
+        with tab_credit:
+            today = datetime.now(timezone(timedelta(hours=3))).date()
+            debt_inv = invoices_all[invoices_all["Debt"] > 0.005].copy()
+            if debt_inv.empty:
+                st.success("✅ لا توجد أرصدة آجلة مستحقة على أي عميل.")
+            else:
+                debt_inv["Age"] = (pd.Timestamp(today) - debt_inv["Date"].dt.normalize()).dt.days
+                debt_inv["Due"] = debt_inv["Date"].dt.normalize() + pd.Timedelta(days=CREDIT_MAX_DAYS)
+                debt_inv["Over"] = debt_inv["Age"] > CREDIT_MAX_DAYS
+                debt_inv["Over_Debt"] = debt_inv["Debt"].where(debt_inv["Over"], 0.0)
+
+                bal = (
+                    debt_inv.groupby("Customer_Key", as_index=False, sort=False)
+                    .agg(
+                        Customer_No=("Customer_No", "first"),
+                        Customer_Name=("Customer_Name", "first"),
+                        Open_Invoices=("Invoice_Key", "nunique"),
+                        Debt=("Debt", "sum"),
+                        Over_Debt=("Over_Debt", "sum"),
+                        Over_Count=("Over", "sum"),
+                        Oldest=("Date", "min"),
+                        Max_Age=("Age", "max"),
+                    )
+                    .sort_values(["Over_Debt", "Max_Age"], ascending=False)
+                    .reset_index(drop=True)
+                )
+
+                def status_of(age):
+                    if age > CREDIT_MAX_DAYS:
+                        return "🔴 متجاوز المهلة"
+                    if age >= CREDIT_MAX_DAYS - 7:
+                        return "🟠 قارب الانتهاء"
+                    return "🟢 ضمن المهلة"
+
+                bal["Status"] = bal["Max_Age"].map(status_of)
+
+                n_over = int((bal["Over_Count"] > 0).sum())
+                n_soon = int((bal["Status"] == "🟠 قارب الانتهاء").sum())
+                if n_over:
+                    st.error(
+                        f"🚨 تنبيه: {n_over:,} عميل تجاوزت فواتيره الآجلة {CREDIT_MAX_DAYS} يوماً "
+                        f"({int(bal['Over_Count'].sum()):,} فاتورة) بمبلغ متأخر {num(bal['Over_Debt'].sum())} SAR."
+                    )
+                if n_soon:
+                    st.warning(f"⏳ {n_soon:,} عميل قارب على انتهاء مهلة {CREDIT_MAX_DAYS} يوماً (خلال 7 أيام).")
+                if not n_over and not n_soon:
+                    st.success(f"✅ جميع الفواتير الآجلة ضمن مهلة {CREDIT_MAX_DAYS} يوماً.")
+
+                c1, c2, c3 = st.columns(3)
+                c1.metric("إجمالي أرصدة الآجل (SAR)", num(bal["Debt"].sum()))
+                c2.metric("المتأخر عن المهلة (SAR)", num(bal["Over_Debt"].sum()))
+                c3.metric("عملاء عليهم رصيد", f"{len(bal):,}")
+
+                bal_df = pd.DataFrame({
+                    "الحالة": bal["Status"],
+                    "رقم العميل": bal["Customer_No"].fillna("—").astype(str),
+                    "اسم العميل": bal["Customer_Name"].astype(str),
+                    "فواتير مفتوحة": bal["Open_Invoices"],
+                    "الرصيد (SAR)": bal["Debt"],
+                    "المتأخر (SAR)": bal["Over_Debt"],
+                    "أقدم فاتورة": bal["Oldest"].dt.strftime("%Y-%m-%d"),
+                    "أقصى عمر (يوم)": bal["Max_Age"],
+                })
+                st.dataframe(
+                    bal_df.style.format(
+                        {"فواتير مفتوحة": "{:,.0f}", "الرصيد (SAR)": "{:,.2f}",
+                         "المتأخر (SAR)": "{:,.2f}", "أقصى عمر (يوم)": "{:,.0f}"}
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                    height=min(420, 35 * (len(bal_df) + 1) + 3),
+                )
+
+                det = debt_inv.sort_values(["Over", "Age"], ascending=False)
+                det_df = pd.DataFrame({
+                    "الحالة": np.where(det["Over"], "🔴 متجاوزة", "🟢 ضمن المهلة"),
+                    "رقم العميل": det["Customer_No"].fillna("—").astype(str).values,
+                    "اسم العميل": det["Customer_Name"].astype(str).values,
+                    "رقم الفاتورة": det["Invoice_Show"].astype(str).values,
+                    "تاريخ الفاتورة": det["Date"].dt.strftime("%Y-%m-%d").values,
+                    "آخر موعد للسداد": det["Due"].dt.strftime("%Y-%m-%d").values,
+                    "العمر (يوم)": det["Age"].values,
+                    "المبلغ (SAR)": det["Amount"].values,
+                    "المسدّد (SAR)": det["Paid_Amount"].values,
+                    "المتبقي (SAR)": det["Debt"].values,
+                })
+                with st.expander("📄 تفاصيل الفواتير الآجلة المفتوحة"):
+                    st.dataframe(
+                        det_df.style.format(
+                            {"العمر (يوم)": "{:,.0f}", "المبلغ (SAR)": "{:,.2f}",
+                             "المسدّد (SAR)": "{:,.2f}", "المتبقي (SAR)": "{:,.2f}"}
+                        ),
+                        use_container_width=True,
+                        hide_index=True,
+                        height=min(420, 35 * (len(det_df) + 1) + 3),
+                    )
+
+                st.download_button(
+                    "📥 تحميل أرصدة الآجل (Excel)",
+                    data=excel_bytes({"Credit_Balances": bal_df, "Open_Invoices": det_df}),
+                    file_name=f"Credit_Balances_{today}.xlsx",
+                    mime=xlsx_mime,
+                    use_container_width=True,
+                    key="dl_credit_balances",
+                )
+                st.caption(f"ℹ️ الأرصدة محسوبة من كل الفترات بغض النظر عن فلتر التاريخ. المهلة {CREDIT_MAX_DAYS} يوماً من تاريخ الفاتورة.")
 
 
 
