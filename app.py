@@ -1083,7 +1083,8 @@ def daily_data_from_sheet(sheets):
 
     res = pd.DataFrame(index=df.index)
     res["Parsed_Date"] = parse_excel_date(df[date_col])
-    res["Amount"] = clean_numeric(df[amount_col])
+    # قيمة الفاتورة = العمود D (حسب ترتيب الشيت الحالي)، وإلا العمود المسمّى Amount
+    res["Amount"] = clean_numeric(df.iloc[:, 3] if df.shape[1] > 3 else df[amount_col])
     res["Total_I"] = clean_numeric(df[quantity_col])
     res["Customer_No"] = df[customer_no_col].astype("string").str.strip()
     res["Customer_Name"] = df[customer_name_col].astype("string").str.strip() if customer_name_col else pd.NA
@@ -1101,8 +1102,7 @@ def daily_data_from_sheet(sheets):
         type_col = df.columns[pos] if pos < df.shape[1] else None
     res["Pay_Type"] = df[type_col].map(normalize_pay_type) if type_col is not None else "غير محدد"
     # عمود السداد (A) = المبلغ المسدّد في نفس صف الفاتورة (قد يكون جزءاً من المبلغ)
-    pay_col = find_column(df, ["Paying", "Paid", "السداد", "المسدد"])
-    pay_series = df[pay_col] if pay_col is not None else df.iloc[:, 0]
+    pay_series = df.iloc[:, 0]
     res["Paid_Flag"] = pay_series.map(paid_flag)
     res["Paid_Amt"] = clean_numeric(pay_series).fillna(0.0)
 
