@@ -1033,6 +1033,26 @@ def clean_numeric(series):
     )
 
 
+def normalize_pay_type(v):
+    """العمود E: Cash -> نقد ، Credit -> آجل."""
+    t = str(v).strip().lower() if pd.notna(v) else ""
+    if t.startswith("cash") or "نقد" in t:
+        return "نقد"
+    if t.startswith("credit") or "آجل" in t or "اجل" in t or "أجل" in t:
+        return "آجل"
+    return "غير محدد"
+
+
+def paid_flag(v):
+    """العمود B: أي قيمة غير فارغة/غير صفرية في صف الفاتورة تعني أنها سُدّدت."""
+    if pd.isna(v):
+        return False
+    t = str(v).strip().lower()
+    if t in ("", "nan", "<na>", "none", "0", "0.0", "-", "false", "no", "لا"):
+        return False
+    return True
+
+
 def daily_data_from_sheet(sheets):
     sheet_name = next(
         (name for name in sheets if clean_column_name(name) in ["data", "بيانات"]),
@@ -1068,6 +1088,10 @@ def daily_data_from_sheet(sheets):
     res["Customer_No"] = df[customer_no_col].astype("string").str.strip()
     res["Customer_Name"] = df[customer_name_col].astype("string").str.strip() if customer_name_col else pd.NA
     res["Invoice_No"] = df[invoice_col].astype("string").str.strip() if invoice_col else pd.NA
+
+    # E = نوع الفاتورة (Cash/Credit) ، B = علامة السداد في نفس صف الفاتورة
+    res["Pay_Type"] = df.iloc[:, 4].map(normalize_pay_type) if df.shape[1] > 4 else "غير محدد"
+    res["Paid_Flag"] = df.iloc[:, 1].map(paid_flag) if df.shape[1] > 1 else False
 
     res = res.dropna(subset=["Parsed_Date"]).copy()
 
@@ -1151,7 +1175,7 @@ def month_cartons(year_value, month_abbr):
 # =========================================================
 
 def build_customer_tables(view):
-    """فواتير العملاء وملخصهم من المبيعات المعروضة (تتبع فلتر الجدول اليومي)."""
+    """فواتير العملاء وملخصهم (سحبيات / نقد / آجل / مسدّد / مديونية) من المبيعات المعروضة."""
     d = view.copy()
     for col in ["Customer_No", "Customer_Name", "Invoice_No"]:
         d[col] = d[col].astype("string").str.strip()
@@ -1159,6 +1183,14 @@ def build_customer_tables(view):
 
     for col in ["Customer_No", "Invoice_No"]:
         d[col] = d[col].str.replace(r"\.0+$", "", regex=True)
+
+    if "Pay_Type" not in d.columns:
+        d["Pay_Type"] = "غير محدد"
+    if "Paid_Flag" not in d.columns:
+        d["Paid_Flag"] = False
+    d["_cash"] = d["Pay_Type"].eq("نقد")
+    d["_credit"] = d["Pay_Type"].eq("آجل")
+    d["Paid_Flag"] = d["Paid_Flag"].astype(bool)
 
     d["Customer_Key"] = d["Customer_No"].fillna(d["Customer_Name"]).fillna("غير محدد")
 
@@ -1174,12 +1206,28 @@ def build_customer_tables(view):
             Date=("Parsed_Date", "min"),
             Quantity=("Total_I", lambda s: s.sum(min_count=1)),
             Amount=("Amount", lambda s: s.sum(min_count=1)),
+            Cash_Any=("_cash", "any"),
+            Credit_Any=("_credit", "any"),
+            Paid_Any=("Paid_Flag", "any"),
         )
     )
     invoices["Invoice_Show"] = invoices["Invoice_Key"].where(
         ~invoices["Invoice_Key"].str.startswith("—#"), "—"
     )
     invoices["Customer_Name"] = invoices["Customer_Name"].fillna(invoices["Customer_Key"])
+
+    # نوع الفاتورة: آجل إن وُجد سطر آجل، وإلا نقد. الفاتورة الآجلة تُعتبر مسدّدة إذا وُجدت علامة سداد (العمود B)
+    invoices["Pay_Type"] = np.where(
+        invoices["Credit_Any"], "آجل", np.where(invoices["Cash_Any"], "نقد", "غير محدد")
+    )
+    invoices["Paid"] = invoices["Paid_Any"].astype(bool)
+    amt = invoices["Amount"].fillna(0.0)
+    is_credit = invoices["Pay_Type"].eq("آجل")
+    is_cash = invoices["Pay_Type"].eq("نقد")
+    invoices["Cash_Amount"] = amt.where(is_cash, 0.0)
+    invoices["Credit_Amount"] = amt.where(is_credit, 0.0)
+    invoices["Paid_Amount"] = amt.where(is_credit & invoices["Paid"], 0.0)
+    invoices["Debt"] = amt.where(is_credit & ~invoices["Paid"], 0.0)
 
     customers = (
         invoices.groupby("Customer_Key", as_index=False, sort=False)
@@ -1189,6 +1237,10 @@ def build_customer_tables(view):
             Invoices=("Invoice_Key", "nunique"),
             Quantity=("Quantity", lambda s: s.sum(min_count=1)),
             Amount=("Amount", lambda s: s.sum(min_count=1)),
+            Cash=("Cash_Amount", "sum"),
+            Credit=("Credit_Amount", "sum"),
+            Paid=("Paid_Amount", "sum"),
+            Debt=("Debt", "sum"),
         )
         .sort_values("Amount", ascending=False, na_position="last")
         .reset_index(drop=True)
@@ -1198,14 +1250,24 @@ def build_customer_tables(view):
     return invoices, customers
 
 
+def invoice_type_label(pay_type, paid):
+    """نص نوع الفاتورة في الكشف: نقد / آجل · مسدّد / آجل · مستحق."""
+    if pay_type == "نقد":
+        return "نقد"
+    if pay_type == "آجل":
+        return "آجل · مسدّد" if paid else "آجل · مستحق"
+    return "—"
+
+
 def build_statement_table(inv):
-    """كشف حساب عميل: الفواتير بالتاريخ + إجمالي تراكمي + صف الإجمالي."""
+    """كشف حساب عميل: الفواتير بالتاريخ + النوع (نقد/آجل) + إجمالي تراكمي + صف الإجمالي."""
     inv = inv.sort_values(["Date", "Invoice_Show"]).reset_index(drop=True)
     inv["Cumulative"] = inv["Amount"].fillna(0).cumsum()
 
     stmt = pd.DataFrame({
         "التاريخ": inv["Date"].dt.strftime("%Y-%m-%d"),
         "رقم الفاتورة": inv["Invoice_Show"].astype(str),
+        "النوع": [invoice_type_label(p, bool(x)) for p, x in zip(inv["Pay_Type"], inv["Paid"])],
         "الكمية (كرتون)": inv["Quantity"],
         "المبلغ (SAR)": inv["Amount"],
         "الإجمالي التراكمي (SAR)": inv["Cumulative"],
@@ -1213,11 +1275,13 @@ def build_statement_table(inv):
     closing = pd.DataFrame([{
         "التاريخ": "الإجمالي",
         "رقم الفاتورة": f"{len(inv):,} فاتورة",
+        "النوع": "",
         "الكمية (كرتون)": inv["Quantity"].sum(min_count=1),
         "المبلغ (SAR)": inv["Amount"].sum(min_count=1),
         "الإجمالي التراكمي (SAR)": inv["Cumulative"].iloc[-1],
     }])
     return pd.concat([stmt, closing], ignore_index=True)
+
 
 
 def qfmt(v):
@@ -1246,7 +1310,7 @@ html, body { margin:0; padding:0; background:transparent; overflow-x:hidden;
   border-inline-start:5px solid #0E9F8E; padding:9px 12px; margin-bottom:10px; }
 .cust .nm { font-weight:800; font-size:14px; line-height:1.5; }
 .cust .mt { font-size:11.5px; color:#CFE0F1; margin-top:2px; }
-.kpis { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-bottom:10px; }
+.kpis { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; margin-bottom:10px; }
 .kpi { border:1px solid #D9E2EC; border-top:3px solid #0E9F8E; border-radius:10px; padding:7px 9px; text-align:center; }
 .kpi .l { font-size:11px; color:#52637A; font-weight:700; }
 .kpi .v { font-size:16px; font-weight:800; color:#0B2545; direction:ltr; }
@@ -1255,6 +1319,19 @@ th { background:#0B2545; color:#FFFFFF; padding:7px 6px; font-weight:700; text-a
 td { padding:6px; border-bottom:1px solid #E2E8F0; text-align:center; white-space:nowrap; }
 td.n { direction:ltr; font-variant-numeric:tabular-nums; }
 tbody tr:nth-child(even) td { background:#F6F9FC; }
+.bd { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; }
+.b-cash { background:#E3F6F3; color:#0B7F73; }
+.b-paid { background:#E6F4EA; color:#1E7B3A; }
+.b-due { background:#FDE8E8; color:#B42318; }
+.kpi.kd-due { border-top-color:#D92D20; } .kpi.kd-due .v { color:#B42318; }
+.kpi.kd-ok { border-top-color:#16A34A; } .kpi.kd-ok .v { color:#15803D; }
+.acct { margin-top:10px; border:1px solid #D9E2EC; border-radius:10px; overflow:hidden; }
+.acct .ah { background:#0B2545; color:#fff; font-weight:800; font-size:13px; padding:7px 12px; }
+.acct .as { background:#F1F5F9; color:#52637A; font-size:11px; font-weight:700; padding:4px 12px; }
+.acct .rw { display:flex; justify-content:space-between; gap:8px; padding:6px 12px; font-size:12.5px; border-bottom:1px solid #E2E8F0; }
+.acct .rw b { direction:ltr; font-variant-numeric:tabular-nums; }
+.acct .rw.due { background:#FDE8E8; color:#B42318; font-weight:800; }
+.acct .rw.ok { background:#E6F4EA; color:#15803D; font-weight:800; }
 tr.tot td { background:#E8EEF5 !important; font-weight:800; color:#0B2545; border-top:2px solid #0B2545; }
 .foot { margin-top:8px; font-size:10.5px; color:#7A8AA0; display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; }
 /* شاشة ضيقة (جوال): ترويسة مكدّسة وخط أصغر. الصورة المحمّلة بعرض 760 تبقى بالتخطيط العريض */
@@ -1265,7 +1342,10 @@ tr.tot td { background:#E8EEF5 !important; font-weight:800; color:#0B2545; borde
   .lh .ar { font-size:13px; }
   th { font-size:10px; padding:6px 3px; }
   td { font-size:11.5px; padding:6px 3px; }
+  .kpis { grid-template-columns:repeat(2, 1fr); }
   .kpi .v { font-size:14px; }
+  .acct .rw { font-size:11.5px; }
+  th:last-child, td:last-child { display:none; }
   .kpi .l { font-size:10px; }
 }
 #dl { width:100%; height:44px; margin-top:10px; border:0; border-radius:11px; cursor:pointer;
@@ -1352,15 +1432,21 @@ STATEMENT_JS = """
 """
 
 
-def statement_sheet_html(cust_name, cust_no, d_from, d_to, n_inv, qty, amount, stmt, file_name):
-    """كشف حساب العميل كورقة HTML (ترويسة الشركة + الجدول) مع زر تحميلها كصورة PNG."""
+def statement_sheet_html(cust_name, cust_no, d_from, d_to, n_inv, qty, acct, stmt, file_name):
+    """كشف حساب العميل كورقة HTML (ترويسة الشركة + الجدول + ملخص الحساب) مع زر تحميلها كصورة PNG."""
     esc = html.escape
+
+    def badge(label):
+        cls = {"نقد": "b-cash", "آجل · مسدّد": "b-paid", "آجل · مستحق": "b-due"}.get(label)
+        return f"<span class='bd {cls}'>{esc(label)}</span>" if cls else esc(label)
+
     rows = []
     for _, r in stmt.iloc[:-1].iterrows():
         rows.append(
             "<tr>"
             f"<td>{esc(str(r['التاريخ']))}</td>"
             f"<td>{esc(str(r['رقم الفاتورة']))}</td>"
+            f"<td>{badge(str(r['النوع']))}</td>"
             f"<td class='n'>{qfmt(r['الكمية (كرتون)'])}</td>"
             f"<td class='n'>{num(r['المبلغ (SAR)'])}</td>"
             f"<td class='n'>{num(r['الإجمالي التراكمي (SAR)'])}</td>"
@@ -1371,10 +1457,31 @@ def statement_sheet_html(cust_name, cust_no, d_from, d_to, n_inv, qty, amount, s
         "<tr class='tot'>"
         f"<td>{esc(str(c['التاريخ']))}</td>"
         f"<td>{esc(str(c['رقم الفاتورة']))}</td>"
+        "<td></td>"
         f"<td class='n'>{qfmt(c['الكمية (كرتون)'])}</td>"
         f"<td class='n'>{num(c['المبلغ (SAR)'])}</td>"
         f"<td class='n'>{num(c['الإجمالي التراكمي (SAR)'])}</td>"
         "</tr>"
+    )
+
+    def line(label, value, cls=""):
+        return f"<div class='rw {cls}'><span>{label}</span><b>{num(value)}</b></div>"
+
+    debt_all = float(acct["debt_all"])
+    debt_cls = "due" if debt_all > 0.005 else "ok"
+    account_box = (
+        "<div class='acct'>"
+        "<div class='ah'>ملخص الحساب</div>"
+        "<div class='as'>خلال الفترة المحددة</div>"
+        + line("إجمالي السحبيات (نقد + آجل)", acct["amount"])
+        + line("مشتريات نقد", acct["cash"])
+        + line("مشتريات آجل", acct["credit"])
+        + line("المسدّد من الآجل", acct["paid"])
+        + line("المديونية في الفترة (آجل غير مسدّد)", acct["debt_period"])
+        + "<div class='as'>الرصيد الإجمالي (كل الفترات)</div>"
+        + line("إجمالي سحبيات العميل", acct["amount_all"])
+        + line("إجمالي المديونية على العميل", acct["debt_all"], debt_cls)
+        + "</div>"
     )
 
     issued = datetime.now(timezone(timedelta(hours=3))).strftime("%Y-%m-%d %H:%M")
@@ -1407,14 +1514,16 @@ def statement_sheet_html(cust_name, cust_no, d_from, d_to, n_inv, qty, amount, s
         "<div class='kpis'>"
         f"<div class='kpi'><div class='l'>عدد الفواتير</div><div class='v'>{n_inv:,}</div></div>"
         f"<div class='kpi'><div class='l'>الكمية (كرتون)</div><div class='v'>{qfmt(qty)}</div></div>"
-        f"<div class='kpi'><div class='l'>المبلغ (SAR)</div><div class='v'>{num(amount)}</div></div>"
+        f"<div class='kpi'><div class='l'>سحبيات الفترة (SAR)</div><div class='v'>{num(acct['amount'])}</div></div>"
+        f"<div class='kpi kd-{debt_cls}'><div class='l'>إجمالي المديونية (SAR)</div><div class='v'>{num(debt_all)}</div></div>"
         "</div>"
         "<table><thead><tr>"
-        "<th>التاريخ</th><th>رقم الفاتورة</th><th>الكمية (كرتون)</th>"
+        "<th>التاريخ</th><th>رقم الفاتورة</th><th>النوع</th><th>الكمية (كرتون)</th>"
         "<th>المبلغ (SAR)</th><th>الإجمالي التراكمي (SAR)</th>"
         "</tr></thead><tbody>"
         + "".join(rows) +
         "</tbody></table>"
+        + account_box +
         f"<div class='foot'><span>تاريخ الإصدار: {issued}</span>"
         "<span>الكميات بالكرتون · المبالغ بالريال السعودي (SAR)</span></div>"
         "</div>"
@@ -1425,7 +1534,7 @@ def statement_sheet_html(cust_name, cust_no, d_from, d_to, n_inv, qty, amount, s
 
 
 def render_customer_statement(all_df, default_view, year_value):
-    """بطاقة كشف حساب وفواتير وإجمالي كميات العملاء، بفترة مرنة قابلة للتغيير."""
+    """بطاقة كشف حساب وفواتير وإجمالي كميات ومديونية العملاء، بفترة مرنة قابلة للتغيير."""
     xlsx_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     a_min, a_max = all_df["Date_Only"].min(), all_df["Date_Only"].max()
     dv_min, dv_max = default_view["Date_Only"].min(), default_view["Date_Only"].max()
@@ -1470,9 +1579,17 @@ def render_customer_statement(all_df, default_view, year_value):
             return
 
         invoices, customers = build_customer_tables(view)
+
+        # المديونية والسحبيات الإجمالية لكل عميل عبر كل الفترات (الرصيد الفعلي لا يتأثر بفلتر التاريخ)
+        _, customers_all = build_customer_tables(all_df)
+        all_map = customers_all.set_index("Customer_Key")
+        customers["Debt_All"] = customers["Customer_Key"].map(all_map["Debt"]).fillna(0.0)
+        customers["Amount_All"] = customers["Customer_Key"].map(all_map["Amount"]).fillna(0.0)
+
         d_min, d_max = view["Date_Only"].min(), view["Date_Only"].max()
         st.caption(
             f"📆 {d_min} ← {d_max}  ·  👥 {len(customers):,} عميل  ·  🧾 {len(invoices):,} فاتورة"
+            f"  ·  💳 مديونية العملاء: {num(customers['Debt_All'].sum())}"
         )
 
         tab_sum, tab_cust = st.tabs(["👥 ملخص العملاء", "🧾 كشف حساب عميل"])
@@ -1484,36 +1601,57 @@ def render_customer_statement(all_df, default_view, year_value):
                 "اسم العميل": customers["Customer_Name"].astype(str),
                 "الفواتير": customers["Invoices"],
                 "الكمية (كرتون)": customers["Quantity"],
-                "المبلغ (SAR)": customers["Amount"],
+                "السحبيات (SAR)": customers["Amount"],
+                "المديونية (SAR)": customers["Debt_All"],
                 "% من الإجمالي": customers["Share"],
             })
+            styler = summary_df.style.format(
+                {
+                    "الفواتير": "{:,.0f}",
+                    "الكمية (كرتون)": qfmt,
+                    "السحبيات (SAR)": "{:,.2f}",
+                    "المديونية (SAR)": "{:,.2f}",
+                    "% من الإجمالي": "{:.1f}%",
+                },
+                na_rep="—",
+            )
+            apply_fn = styler.map if hasattr(styler, "map") else styler.applymap
+            styler = apply_fn(
+                lambda v: f"color:{C['red']}; font-weight:700" if pd.notna(v) and v > 0.005 else "",
+                subset=["المديونية (SAR)"],
+            )
             st.dataframe(
-                summary_df.style.format(
-                    {
-                        "الفواتير": "{:,.0f}",
-                        "الكمية (كرتون)": qfmt,
-                        "المبلغ (SAR)": "{:,.2f}",
-                        "% من الإجمالي": "{:.1f}%",
-                    },
-                    na_rep="—",
-                ),
+                styler,
                 use_container_width=True,
                 hide_index=True,
                 height=min(420, 35 * (len(summary_df) + 1) + 3),
             )
 
+            summary_export = pd.DataFrame({
+                "رقم العميل": customers["Customer_No"].fillna("—").astype(str),
+                "اسم العميل": customers["Customer_Name"].astype(str),
+                "الفواتير": customers["Invoices"],
+                "الكمية (كرتون)": customers["Quantity"],
+                "السحبيات (SAR)": customers["Amount"],
+                "نقد (SAR)": customers["Cash"],
+                "آجل (SAR)": customers["Credit"],
+                "المسدّد من الآجل (SAR)": customers["Paid"],
+                "مديونية الفترة (SAR)": customers["Debt"],
+                "المديونية الكلية (SAR)": customers["Debt_All"],
+            })
             invoices_export = pd.DataFrame({
                 "رقم العميل": invoices["Customer_No"].fillna("—").astype(str),
                 "اسم العميل": invoices["Customer_Name"].astype(str),
                 "التاريخ": invoices["Date"].dt.strftime("%Y-%m-%d"),
                 "رقم الفاتورة": invoices["Invoice_Show"].astype(str),
+                "النوع": [invoice_type_label(p, bool(x)) for p, x in zip(invoices["Pay_Type"], invoices["Paid"])],
                 "الكمية (كرتون)": invoices["Quantity"],
                 "المبلغ (SAR)": invoices["Amount"],
             }).sort_values(["اسم العميل", "التاريخ"])
 
             st.download_button(
                 "📥 تحميل ملخص العملاء والفواتير (Excel)",
-                data=excel_bytes({"Customers": summary_df, "Invoices": invoices_export}),
+                data=excel_bytes({"Customers": summary_export, "Invoices": invoices_export}),
                 file_name=f"Customers_Summary_{d_min}_{d_max}.xlsx",
                 mime=xlsx_mime,
                 use_container_width=True,
@@ -1540,18 +1678,29 @@ def render_customer_statement(all_df, default_view, year_value):
             inv = invoices[invoices["Customer_Key"] == chosen].copy()
             stmt = build_statement_table(inv)
 
+            acct = {
+                "amount": cust["Amount"],
+                "cash": cust["Cash"],
+                "credit": cust["Credit"],
+                "paid": cust["Paid"],
+                "debt_period": cust["Debt"],
+                "amount_all": cust["Amount_All"],
+                "debt_all": cust["Debt_All"],
+            }
+
             cust_no = "—" if pd.isna(cust["Customer_No"]) else str(cust["Customer_No"])
             safe_name = re.sub(r"[^\w\-]+", "_", str(cust["Customer_Name"])).strip("_")[:40] or "customer"
 
             components.html(
                 statement_sheet_html(
                     cust["Customer_Name"], cust_no, d_min, d_max,
-                    int(cust["Invoices"]), cust["Quantity"], cust["Amount"],
+                    int(cust["Invoices"]), cust["Quantity"], acct,
                     stmt, f"Statement_{safe_name}_{d_min}_{d_max}.png",
                 ),
-                height=560 + 32 * len(stmt),
+                height=820 + 32 * len(stmt),
                 scrolling=False,
             )
+
 
 
 # =========================================================
