@@ -1490,8 +1490,6 @@ def statement_sheet_html(cust_name, cust_no, d_from, d_to, n_inv, qty, acct, stm
         + line("مشتريات آجل", acct["credit"])
         + line("المسدّد من الآجل", acct["paid"])
         + line("المديونية في الفترة (آجل غير مسدّد)", acct["debt_period"])
-        + "<div class='as'>الرصيد الإجمالي (كل الفترات)</div>"
-        + line("إجمالي سحبيات العميل", acct["amount_all"])
         + line("إجمالي المديونية على العميل", acct["debt_all"], debt_cls)
         + "</div>"
     )
