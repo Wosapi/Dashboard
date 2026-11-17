@@ -2,7 +2,7 @@ import html
 import io
 import json
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -69,6 +69,13 @@ MONTH_AR = dict(zip(
         "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"
     ]
 ))
+
+# =========================================================
+# COMPANY BRANDING (ترويسة كشف الحساب)
+# =========================================================
+COMPANY_AR = "شركة توتال السعودية للمنتجات البترولية المحدودة"
+COMPANY_EN = "Saudi Total Petroleum Products Co. Ltd"
+LOGO_B64 = "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"
 
 TEXT = {
     "ar": {
@@ -1150,6 +1157,9 @@ def build_customer_tables(view):
         d[col] = d[col].astype("string").str.strip()
         d[col] = d[col].replace({"": pd.NA, "nan": pd.NA, "<NA>": pd.NA})
 
+    for col in ["Customer_No", "Invoice_No"]:
+        d[col] = d[col].str.replace(r"\.0+$", "", regex=True)
+
     d["Customer_Key"] = d["Customer_No"].fillna(d["Customer_Name"]).fillna("غير محدد")
 
     # صف بلا رقم فاتورة يُعامل كفاتورة مستقلة حتى لا تُدمج الصفوف معاً
@@ -1210,14 +1220,257 @@ def build_statement_table(inv):
     return pd.concat([stmt, closing], ignore_index=True)
 
 
-def render_customer_statement(view):
-    """بطاقة كشف حساب وفواتير وإجمالي كميات العملاء — تتبع الفترة المعروضة في الجدول اليومي."""
-    invoices, customers = build_customer_tables(view)
-    d_min, d_max = view["Date_Only"].min(), view["Date_Only"].max()
+def qfmt(v):
+    """كمية بالكرتون: عدد صحيح بلا أصفار عشرية، وبرقمين فقط إن كانت كسرية."""
+    if pd.isna(v):
+        return "—"
+    v = float(v)
+    return f"{v:,.0f}" if abs(v - round(v)) < 1e-9 else f"{v:,.2f}"
+
+
+STATEMENT_CSS = """
+* { box-sizing: border-box; }
+html, body { margin:0; padding:0; background:transparent; overflow-x:hidden;
+  font-family:"Segoe UI", Tahoma, "Noto Sans Arabic", Arial, sans-serif; color:#0F2540; }
+#sheet { background:#FFFFFF; border:1px solid #D9E2EC; border-radius:14px; padding:16px 16px 12px; width:100%;
+  container-type:inline-size; }
+.lh { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:10px;
+  padding-bottom:12px; border-bottom:3px solid #0B2545; }
+.lh .ar { text-align:right; font-weight:800; font-size:14px; line-height:1.55; color:#0B2545; }
+.lh .en { text-align:left; direction:ltr; font-weight:700; font-size:12px; line-height:1.55; color:#334E68; }
+.lh img { height:56px; width:auto; display:block; }
+.title { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin:12px 0 10px; }
+.title b { font-size:15px; color:#0B2545; }
+.title span { font-size:11.5px; color:#52637A; }
+.cust { background:linear-gradient(100deg,#0B2545,#13315C); color:#FFFFFF; border-radius:10px;
+  border-inline-start:5px solid #0E9F8E; padding:9px 12px; margin-bottom:10px; }
+.cust .nm { font-weight:800; font-size:14px; line-height:1.5; }
+.cust .mt { font-size:11.5px; color:#CFE0F1; margin-top:2px; }
+.kpis { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-bottom:10px; }
+.kpi { border:1px solid #D9E2EC; border-top:3px solid #0E9F8E; border-radius:10px; padding:7px 9px; text-align:center; }
+.kpi .l { font-size:11px; color:#52637A; font-weight:700; }
+.kpi .v { font-size:16px; font-weight:800; color:#0B2545; direction:ltr; }
+table { width:100%; border-collapse:collapse; font-size:12.5px; }
+th { background:#0B2545; color:#FFFFFF; padding:7px 6px; font-weight:700; text-align:center; font-size:11.5px; }
+td { padding:6px; border-bottom:1px solid #E2E8F0; text-align:center; white-space:nowrap; }
+td.n { direction:ltr; font-variant-numeric:tabular-nums; }
+tbody tr:nth-child(even) td { background:#F6F9FC; }
+tr.tot td { background:#E8EEF5 !important; font-weight:800; color:#0B2545; border-top:2px solid #0B2545; }
+.foot { margin-top:8px; font-size:10.5px; color:#7A8AA0; display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+/* شاشة ضيقة (جوال): ترويسة مكدّسة وخط أصغر. الصورة المحمّلة بعرض 760 تبقى بالتخطيط العريض */
+@container (max-width: 520px) {
+  .lh { grid-template-columns:1fr; gap:6px; }
+  .lh img { margin:0 auto; order:-1; height:48px; }
+  .lh .ar, .lh .en { text-align:center; }
+  .lh .ar { font-size:13px; }
+  th { font-size:10px; padding:6px 3px; }
+  td { font-size:11.5px; padding:6px 3px; }
+  .kpi .v { font-size:14px; }
+  .kpi .l { font-size:10px; }
+}
+#dl { width:100%; height:44px; margin-top:10px; border:0; border-radius:11px; cursor:pointer;
+  background:linear-gradient(100deg,#0E9F8E,#0B7F73); color:#FFFFFF; font-family:inherit;
+  font-size:15px; font-weight:700; box-shadow:0 3px 10px rgba(14,159,142,.35); }
+#dl:disabled { opacity:.7; cursor:wait; }
+"""
+
+STATEMENT_JS = """
+(function () {
+  var LABEL = __LABEL__, BUSY = __BUSY__, DONE = __DONE__, FAIL = __FAIL__, FILE = __FILE__;
+  var SRCS = [
+    "https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.min.js",
+    "https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js",
+    "https://unpkg.com/html-to-image@1.11.11/dist/html-to-image.js"
+  ];
+  var btn = document.getElementById("dl");
+  var sheet = document.getElementById("sheet");
+  var wrap = document.getElementById("wrap");
+  btn.textContent = LABEL;
+
+  function fit() {
+    try {
+      if (window.frameElement) {
+        window.frameElement.style.height = (wrap.getBoundingClientRect().height + 6) + "px";
+      }
+    } catch (e) {}
+  }
+  fit();
+  if (window.ResizeObserver) { new ResizeObserver(fit).observe(wrap); }
+  window.addEventListener("load", fit);
+  window.addEventListener("resize", fit);
+
+  function loadLib(i) {
+    return new Promise(function (resolve, reject) {
+      if (window.htmlToImage) { resolve(); return; }
+      if (i >= SRCS.length) { reject(new Error("library")); return; }
+      var s = document.createElement("script");
+      s.src = SRCS[i];
+      s.onload = function () { window.htmlToImage ? resolve() : loadLib(i + 1).then(resolve, reject); };
+      s.onerror = function () { loadLib(i + 1).then(resolve, reject); };
+      document.head.appendChild(s);
+    });
+  }
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  btn.addEventListener("click", async function () {
+    btn.disabled = true;
+    btn.textContent = BUSY;
+    var oldW = sheet.style.width, oldMax = sheet.style.maxWidth;
+    try {
+      await loadLib(0);
+      // عرض ثابت للصورة بغض النظر عن حجم الشاشة
+      sheet.style.width = "760px";
+      sheet.style.maxWidth = "760px";
+      await sleep(250);
+      var h = sheet.offsetHeight;
+      var opts = { backgroundColor: "#FFFFFF", pixelRatio: 2, cacheBust: true, width: 760, height: h };
+      var blob;
+      try {
+        blob = await window.htmlToImage.toBlob(sheet, opts);
+      } catch (e1) {
+        opts.skipFonts = true;
+        blob = await window.htmlToImage.toBlob(sheet, opts);
+      }
+      if (!blob) { throw new Error("blob"); }
+      var P = window.parent, pd = P.document;
+      var url = P.URL.createObjectURL(blob);
+      var a = pd.createElement("a");
+      a.href = url; a.download = FILE;
+      pd.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { P.URL.revokeObjectURL(url); }, 5000);
+      btn.textContent = DONE;
+    } catch (err) {
+      btn.textContent = FAIL;
+    } finally {
+      sheet.style.width = oldW;
+      sheet.style.maxWidth = oldMax;
+      fit();
+      setTimeout(function () { btn.textContent = LABEL; btn.disabled = false; }, 2800);
+    }
+  });
+})();
+"""
+
+
+def statement_sheet_html(cust_name, cust_no, d_from, d_to, n_inv, qty, amount, stmt, file_name):
+    """كشف حساب العميل كورقة HTML (ترويسة الشركة + الجدول) مع زر تحميلها كصورة PNG."""
+    esc = html.escape
+    rows = []
+    for _, r in stmt.iloc[:-1].iterrows():
+        rows.append(
+            "<tr>"
+            f"<td>{esc(str(r['التاريخ']))}</td>"
+            f"<td>{esc(str(r['رقم الفاتورة']))}</td>"
+            f"<td class='n'>{qfmt(r['الكمية (كرتون)'])}</td>"
+            f"<td class='n'>{num(r['المبلغ (SAR)'])}</td>"
+            f"<td class='n'>{num(r['الإجمالي التراكمي (SAR)'])}</td>"
+            "</tr>"
+        )
+    c = stmt.iloc[-1]
+    rows.append(
+        "<tr class='tot'>"
+        f"<td>{esc(str(c['التاريخ']))}</td>"
+        f"<td>{esc(str(c['رقم الفاتورة']))}</td>"
+        f"<td class='n'>{qfmt(c['الكمية (كرتون)'])}</td>"
+        f"<td class='n'>{num(c['المبلغ (SAR)'])}</td>"
+        f"<td class='n'>{num(c['الإجمالي التراكمي (SAR)'])}</td>"
+        "</tr>"
+    )
+
+    issued = datetime.now(timezone(timedelta(hours=3))).strftime("%Y-%m-%d %H:%M")
+    js = (
+        STATEMENT_JS
+        .replace("__LABEL__", json.dumps("📸 تحميل كشف الحساب (صورة PNG)"))
+        .replace("__BUSY__", json.dumps("⏳ جارٍ إنشاء الصورة..."))
+        .replace("__DONE__", json.dumps("✅ تم تحميل الصورة"))
+        .replace("__FAIL__", json.dumps("⚠️ تعذّر إنشاء الصورة"))
+        .replace("__FILE__", json.dumps(file_name))
+    )
+
+    return (
+        "<!doctype html><html dir='rtl' lang='ar'><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+        f"<style>{STATEMENT_CSS}</style></head><body>"
+        "<div id='wrap'>"
+        "<div id='sheet'>"
+        "<div class='lh'>"
+        f"<div class='ar'>{esc(COMPANY_AR)}</div>"
+        f"<img alt='logo' src='data:image/png;base64,{LOGO_B64}'>"
+        f"<div class='en'>{esc(COMPANY_EN)}</div>"
+        "</div>"
+        "<div class='title'><b>كشف حساب عميل</b>"
+        f"<span>من {esc(str(d_from))} إلى {esc(str(d_to))}</span></div>"
+        "<div class='cust'>"
+        f"<div class='nm'>👤 {esc(str(cust_name))}</div>"
+        f"<div class='mt'>رقم العميل: {esc(str(cust_no))}</div>"
+        "</div>"
+        "<div class='kpis'>"
+        f"<div class='kpi'><div class='l'>عدد الفواتير</div><div class='v'>{n_inv:,}</div></div>"
+        f"<div class='kpi'><div class='l'>الكمية (كرتون)</div><div class='v'>{qfmt(qty)}</div></div>"
+        f"<div class='kpi'><div class='l'>المبلغ (SAR)</div><div class='v'>{num(amount)}</div></div>"
+        "</div>"
+        "<table><thead><tr>"
+        "<th>التاريخ</th><th>رقم الفاتورة</th><th>الكمية (كرتون)</th>"
+        "<th>المبلغ (SAR)</th><th>الإجمالي التراكمي (SAR)</th>"
+        "</tr></thead><tbody>"
+        + "".join(rows) +
+        "</tbody></table>"
+        f"<div class='foot'><span>تاريخ الإصدار: {issued}</span>"
+        "<span>الكميات بالكرتون · المبالغ بالريال السعودي (SAR)</span></div>"
+        "</div>"
+        "<button id='dl'></button>"
+        "</div>"
+        f"<script>{js}</script></body></html>"
+    )
+
+
+def render_customer_statement(all_df, default_view, year_value):
+    """بطاقة كشف حساب وفواتير وإجمالي كميات العملاء، بفترة مرنة قابلة للتغيير."""
     xlsx_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    a_min, a_max = all_df["Date_Only"].min(), all_df["Date_Only"].max()
+    dv_min, dv_max = default_view["Date_Only"].min(), default_view["Date_Only"].max()
 
     with st.container(key="card_statement"):
         st.markdown('<div class="panel-heading">🧾 كشف حساب وفواتير العملاء</div>', unsafe_allow_html=True)
+
+        # ---------- فترة الكشف (مرنة) ----------
+        presets = ["فترة الجدول اليومي", "آخر 7 أيام", "آخر 30 يوماً", "السنة كاملة", "نطاق مخصص"]
+        preset = st.selectbox("📆 فترة الكشف", presets, key="stmt_period")
+
+        if preset == "آخر 7 أيام":
+            start_d, end_d = max(a_min, a_max - timedelta(days=6)), a_max
+        elif preset == "آخر 30 يوماً":
+            start_d, end_d = max(a_min, a_max - timedelta(days=29)), a_max
+        elif preset == "السنة كاملة":
+            yr = all_df[all_df["Year"] == int(year_value)]
+            start_d, end_d = (yr["Date_Only"].min(), yr["Date_Only"].max()) if not yr.empty else (a_min, a_max)
+        elif preset == "نطاق مخصص":
+            picked = st.date_input(
+                "اختر نطاق التواريخ:",
+                value=(dv_min, dv_max),
+                min_value=a_min,
+                max_value=a_max,
+                key="stmt_range",
+            )
+            if isinstance(picked, (tuple, list)) and len(picked) == 2:
+                start_d, end_d = picked
+            else:
+                start_d, end_d = dv_min, dv_max
+                st.caption("ℹ️ اختر تاريخ النهاية لإكمال النطاق.")
+        else:
+            start_d, end_d = dv_min, dv_max
+
+        if preset == "فترة الجدول اليومي":
+            view = default_view
+        else:
+            view = all_df[(all_df["Date_Only"] >= start_d) & (all_df["Date_Only"] <= end_d)]
+
+        if view.empty:
+            st.info("لا توجد مبيعات في الفترة المحددة.")
+            return
+
+        invoices, customers = build_customer_tables(view)
+        d_min, d_max = view["Date_Only"].min(), view["Date_Only"].max()
         st.caption(
             f"📆 {d_min} ← {d_max}  ·  👥 {len(customers):,} عميل  ·  🧾 {len(invoices):,} فاتورة"
         )
@@ -1238,7 +1491,7 @@ def render_customer_statement(view):
                 summary_df.style.format(
                     {
                         "الفواتير": "{:,.0f}",
-                        "الكمية (كرتون)": "{:,.2f}",
+                        "الكمية (كرتون)": qfmt,
                         "المبلغ (SAR)": "{:,.2f}",
                         "% من الإجمالي": "{:.1f}%",
                     },
@@ -1288,52 +1541,16 @@ def render_customer_statement(view):
             stmt = build_statement_table(inv)
 
             cust_no = "—" if pd.isna(cust["Customer_No"]) else str(cust["Customer_No"])
-            st.markdown(
-                f'<div class="stmt-banner">'
-                f'<div class="stmt-name">👤 {html.escape(str(cust["Customer_Name"]))}</div>'
-                f'<div class="stmt-meta">رقم العميل: {html.escape(cust_no)} · الفترة: {d_min} ← {d_max}</div>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-
-            k1, k2, k3 = st.columns(3)
-            k1.metric("عدد الفواتير", f"{int(cust['Invoices']):,}")
-            k2.metric("الكمية (كرتون)", num(cust["Quantity"]))
-            k3.metric("المبلغ (SAR)", num(cust["Amount"]))
-
-            last_idx = len(stmt) - 1
-            styled = (
-                stmt.style.format(
-                    {
-                        "الكمية (كرتون)": "{:,.2f}",
-                        "المبلغ (SAR)": "{:,.2f}",
-                        "الإجمالي التراكمي (SAR)": "{:,.2f}",
-                    },
-                    na_rep="—",
-                )
-                .apply(
-                    lambda r: (
-                        [f"font-weight:800; background-color:#E8EEF5; color:{C['navy']}"] * len(r)
-                        if r.name == last_idx else [""] * len(r)
-                    ),
-                    axis=1,
-                )
-            )
-            st.dataframe(
-                styled,
-                use_container_width=True,
-                hide_index=True,
-                height=min(420, 35 * (len(stmt) + 1) + 3),
-            )
-
             safe_name = re.sub(r"[^\w\-]+", "_", str(cust["Customer_Name"])).strip("_")[:40] or "customer"
-            st.download_button(
-                "📥 تحميل كشف الحساب (Excel)",
-                data=excel_bytes({"Statement": stmt}),
-                file_name=f"Statement_{safe_name}_{d_min}_{d_max}.xlsx",
-                mime=xlsx_mime,
-                use_container_width=True,
-                key="dl_customer_statement",
+
+            components.html(
+                statement_sheet_html(
+                    cust["Customer_Name"], cust_no, d_min, d_max,
+                    int(cust["Invoices"]), cust["Quantity"], cust["Amount"],
+                    stmt, f"Statement_{safe_name}_{d_min}_{d_max}.png",
+                ),
+                height=560 + 32 * len(stmt),
+                scrolling=False,
             )
 
 
@@ -1792,7 +2009,7 @@ with daily_col:
 
     # كشف حساب وفواتير وإجمالي كميات العملاء (تحت الجدول اليومي)
     if statement_view is not None and not statement_view.empty:
-        render_customer_statement(statement_view)
+        render_customer_statement(daily_df, statement_view, year)
 
 
 # =========================================================
