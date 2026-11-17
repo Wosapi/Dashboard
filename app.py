@@ -1090,7 +1090,16 @@ def daily_data_from_sheet(sheets):
     res["Invoice_No"] = df[invoice_col].astype("string").str.strip() if invoice_col else pd.NA
 
     # E = نوع الفاتورة (Cash/Credit)
-    res["Pay_Type"] = df.iloc[:, 4].map(normalize_pay_type) if df.shape[1] > 4 else "غير محدد"
+    # العمود نفسه يُكتشف بالعنوان (Cash/Credit) حتى لو تغيّر موضعه في الشيت
+    type_col = next(
+        (c for c in df.columns
+         if "cash" in str(c).lower() and "credit" in str(c).lower()),
+        None,
+    ) or find_column(df, ["Payment Type", "Pay Type", "نوع الفاتورة", "نوع الدفع"])
+    if type_col is None and invoice_col is not None:
+        pos = list(df.columns).index(invoice_col) + 1
+        type_col = df.columns[pos] if pos < df.shape[1] else None
+    res["Pay_Type"] = df[type_col].map(normalize_pay_type) if type_col is not None else "غير محدد"
     # عمود السداد (A) = المبلغ المسدّد في نفس صف الفاتورة (قد يكون جزءاً من المبلغ)
     pay_col = find_column(df, ["Paying", "Paid", "السداد", "المسدد"])
     pay_series = df[pay_col] if pay_col is not None else df.iloc[:, 0]
