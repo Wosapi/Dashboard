@@ -1033,6 +1033,9 @@ def clean_numeric(series):
     )
 
 
+SHUKRAN_COL_IDX = 35  # العمود AJ
+
+
 def normalize_pay_type(v):
     """العمود E: Cash -> نقد ، Credit -> آجل."""
     t = str(v).strip().lower() if pd.notna(v) else ""
@@ -1088,6 +1091,13 @@ def daily_data_from_sheet(sheets):
     res["Total_I"] = clean_numeric(df[quantity_col])
     res["Customer_No"] = df[customer_no_col].astype("string").str.strip()
     res["Customer_Name"] = df[customer_name_col].astype("string").str.strip() if customer_name_col else pd.NA
+    # كود شكران (العمود AJ = الموضع 35 بترقيم A=0)
+    if df.shape[1] > SHUKRAN_COL_IDX:
+        code = df.iloc[:, SHUKRAN_COL_IDX].astype("string").str.strip()
+        code = code.str.replace(r"\.0+$", "", regex=True)
+        res["Shukran_Code"] = code.replace({"": pd.NA, "nan": pd.NA, "<NA>": pd.NA, "None": pd.NA})
+    else:
+        res["Shukran_Code"] = pd.NA
     res["Invoice_No"] = df[invoice_col].astype("string").str.strip() if invoice_col else pd.NA
 
     # E = نوع الفاتورة (Cash/Credit)
@@ -1200,6 +1210,9 @@ def build_customer_tables(view):
     for col in ["Customer_No", "Invoice_No"]:
         d[col] = d[col].str.replace(r"\.0+$", "", regex=True)
 
+    if "Shukran_Code" not in d.columns:
+        d["Shukran_Code"] = pd.NA
+    d["Shukran_Code"] = d["Shukran_Code"].astype("string")
     if "Pay_Type" not in d.columns:
         d["Pay_Type"] = "غير محدد"
     if "Paid_Flag" not in d.columns:
@@ -1229,6 +1242,7 @@ def build_customer_tables(view):
             Credit_Any=("_credit", "any"),
             Paid_Any=("Paid_Flag", "any"),
             Paid_Raw=("Paid_Amt", "sum"),
+            Shukran_Code=("Shukran_Code", "first"),
         )
     )
     invoices["Invoice_Show"] = invoices["Invoice_Key"].where(
@@ -1264,6 +1278,7 @@ def build_customer_tables(view):
             Credit=("Credit_Amount", "sum"),
             Paid=("Paid_Amount", "sum"),
             Debt=("Debt", "sum"),
+            Shukran_Code=("Shukran_Code", "first"),
         )
         .sort_values("Amount", ascending=False, na_position="last")
         .reset_index(drop=True)
@@ -1557,6 +1572,140 @@ def statement_sheet_html(cust_name, cust_no, d_from, d_to, n_inv, qty, acct, stm
     )
 
 
+CODE128_PATTERNS = "212222 222122 222221 121223 121322 131222 122213 122312 132212 221213 221312 231212 112232 122132 122231 113222 123122 123221 223211 221132 221231 213212 223112 312131 311222 321122 321221 312212 322112 322211 212123 212321 232121 111323 131123 131321 112313 132113 132311 211313 231113 231311 112133 112331 132131 113123 113321 133121 313121 211331 231131 213113 213311 213131 311123 311321 331121 312113 312311 332111 314111 221411 431111 111224 111422 121124 121421 141122 141221 112214 112412 122114 122411 142112 142211 241211 221114 413111 241112 134111 111242 121142 121241 114212 124112 124211 411212 421112 421211 212141 214121 412121 111143 111341 131141 114113 114311 411113 411311 113141 114131 311141 411131 211412 211214 211232 2331112".split()
+
+
+def code128_widths(text):
+    """ترميز Code 128 (يختار C للأرقام الزوجية وإلا B) ويعيد أعراض الأشرطة/الفراغات كسلسلة أرقام."""
+    text = str(text)
+    if not text or any(ord(ch) < 32 or ord(ch) > 126 for ch in text):
+        raise ValueError("code")
+    if text.isdigit() and len(text) % 2 == 0 and len(text) >= 2:
+        values = [105] + [int(text[i:i + 2]) for i in range(0, len(text), 2)]
+    else:
+        values = [104] + [ord(ch) - 32 for ch in text]
+    check = (values[0] + sum(v * i for i, v in enumerate(values[1:], start=1))) % 103
+    values += [check, 106]
+    return "".join(CODE128_PATTERNS[v] for v in values)
+
+
+def barcode_svg(widths, bar_h=150):
+    """باركود كـ SVG (مع هامش هادئ 10 وحدات) بلا أي مكتبة خارجية."""
+    quiet = 10
+    x, rects = quiet, []
+    for i, ch in enumerate(widths):
+        w = int(ch)
+        if i % 2 == 0:
+            rects.append(f"<rect x='{x}' y='0' width='{w}' height='{bar_h}'/>")
+        x += w
+    total = x + quiet
+    return (
+        f"<svg viewBox='0 0 {total} {bar_h}' preserveAspectRatio='none' xmlns='http://www.w3.org/2000/svg' "
+        f"class='bars' shape-rendering='crispEdges'><rect width='{total}' height='{bar_h}' fill='#fff'/>"
+        f"<g fill='#000'>{''.join(rects)}</g></svg>"
+    )
+
+
+SHUKRAN_CSS = """
+* { box-sizing:border-box; }
+html, body { margin:0; padding:0; background:transparent; font-family:"Segoe UI", Tahoma, "Noto Sans Arabic", Arial, sans-serif; color:#0F2540; }
+#card { background:#fff; border:1px solid #D9E2EC; border-radius:14px; padding:16px; text-align:center; }
+.brand { display:flex; align-items:center; justify-content:center; gap:10px; padding-bottom:10px; border-bottom:3px solid #0B2545; }
+.brand img { height:44px; width:auto; }
+.brand b { font-size:15px; color:#0B2545; }
+.cap { margin:12px 0 4px; font-weight:800; font-size:17px; color:#0B2545; }
+.sub { color:#52637A; font-size:12px; margin-bottom:10px; }
+.cust { background:linear-gradient(100deg,#0B2545,#13315C); color:#fff; border-radius:10px;
+  border-inline-start:5px solid #0E9F8E; padding:9px 12px; text-align:right; margin-bottom:14px; }
+.cust .nm { font-weight:800; font-size:14px; line-height:1.5; }
+.cust .mt { font-size:11.5px; color:#CFE0F1; margin-top:2px; }
+.bcbox { background:#fff; border:1px dashed #B8C4D3; border-radius:10px; padding:14px 10px 8px; }
+.bars { width:100%; max-width:520px; height:120px; display:block; margin:0 auto; }
+.code { direction:ltr; font-family:"Courier New", monospace; font-size:20px; font-weight:700; letter-spacing:3px; margin-top:6px; color:#000; word-break:break-all; }
+#dl { width:100%; height:44px; margin-top:12px; border:0; border-radius:11px; cursor:pointer;
+  background:linear-gradient(100deg,#0E9F8E,#0B7F73); color:#fff; font-family:inherit; font-size:15px; font-weight:700; }
+#dl:disabled { opacity:.7; }
+"""
+
+SHUKRAN_JS = """
+(function () {
+  var W = __WIDTHS__, CODE = __CODE__, NAME = __NAME__, NO = __NO__, FILE = __FILE__, LOGO = __LOGO__;
+  var LABEL = "📸 تحميل الباركود (صورة PNG)";
+  var btn = document.getElementById("dl"), card = document.getElementById("card");
+  btn.textContent = LABEL;
+  function fit() { try { if (window.frameElement) window.frameElement.style.height = (card.getBoundingClientRect().height + 70) + "px"; } catch (e) {} }
+  fit(); window.addEventListener("load", fit); window.addEventListener("resize", fit);
+
+  function draw(img) {
+    var M = 4, Q = 10, mods = 0, i;
+    for (i = 0; i < W.length; i++) mods += +W[i];
+    var bw = (mods + 2 * Q) * M, cw = Math.max(bw + 80, 760), ch = img ? 480 : 396;
+    var c = document.createElement("canvas"); c.width = cw; c.height = ch;
+    var g = c.getContext("2d");
+    g.fillStyle = "#fff"; g.fillRect(0, 0, cw, ch);
+    var y = 24;
+    if (img) { var lh = 70, lw = img.width * lh / img.height; g.drawImage(img, (cw - lw) / 2, y, lw, lh); y += lh + 14; }
+    g.textAlign = "center"; g.fillStyle = "#0B2545";
+    g.font = "bold 26px Tahoma, Arial, sans-serif"; g.fillText("Shukran App", cw / 2, y + 22); y += 40;
+    g.font = "bold 24px Tahoma, Arial, sans-serif"; g.direction = "rtl"; g.fillText(NAME, cw / 2, y + 22); y += 34;
+    g.direction = "ltr"; g.fillStyle = "#52637A"; g.font = "18px Tahoma, Arial, sans-serif";
+    g.fillText("Customer No: " + NO, cw / 2, y + 18); y += 40;
+    var x = (cw - bw) / 2 + Q * M, bh = 190;
+    g.fillStyle = "#000";
+    for (i = 0; i < W.length; i++) { var w = +W[i] * M; if (i % 2 === 0) g.fillRect(x, y, w, bh); x += w; }
+    y += bh + 34;
+    g.fillStyle = "#000"; g.font = "bold 30px 'Courier New', monospace";
+    g.fillText(CODE.split("").join(" "), cw / 2, y);
+    return c;
+  }
+  function save(c) {
+    c.toBlob(function (blob) {
+      var P = window.parent, pd = P.document, url = P.URL.createObjectURL(blob);
+      var a = pd.createElement("a"); a.href = url; a.download = FILE;
+      pd.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { P.URL.revokeObjectURL(url); }, 5000);
+      btn.textContent = "✅ تم تحميل الصورة";
+      setTimeout(function () { btn.textContent = LABEL; btn.disabled = false; }, 2500);
+    }, "image/png");
+  }
+  btn.addEventListener("click", function () {
+    btn.disabled = true;
+    var img = new Image();
+    img.onload = function () { save(draw(img)); };
+    img.onerror = function () { save(draw(null)); };
+    img.src = LOGO;
+  });
+})();
+"""
+
+
+def shukran_card_html(cust_name, cust_no, code, file_name):
+    """بطاقة باركود العميل (Code 128) مع تحميل PNG عالي الدقة مرسوم مباشرة على canvas."""
+    esc = html.escape
+    widths = code128_widths(code)
+    js = (
+        SHUKRAN_JS
+        .replace("__WIDTHS__", json.dumps(widths))
+        .replace("__CODE__", json.dumps(str(code)))
+        .replace("__NAME__", json.dumps(str(cust_name)))
+        .replace("__NO__", json.dumps(str(cust_no)))
+        .replace("__FILE__", json.dumps(file_name))
+        .replace("__LOGO__", json.dumps("data:image/png;base64," + LOGO_B64))
+    )
+    return (
+        "<!doctype html><html dir='rtl' lang='ar'><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+        f"<style>{SHUKRAN_CSS}</style></head><body>"
+        "<div id='wrap'><div id='card'>"
+        f"<div class='brand'><img alt='logo' src='data:image/png;base64,{LOGO_B64}'><b>{esc(COMPANY_AR)}</b></div>"
+        "<div class='cap'>Shukran App</div><div class='sub'>باركود العميل · امسحه عند الكاشير</div>"
+        f"<div class='cust'><div class='nm'>👤 {esc(str(cust_name))}</div><div class='mt'>رقم العميل: {esc(str(cust_no))}</div></div>"
+        f"<div class='bcbox'>{barcode_svg(widths)}<div class='code'>{esc(str(code))}</div></div>"
+        "<button id='dl'></button></div></div>"
+        f"<script>{js}</script></body></html>"
+    )
+
+
 def render_customer_statement(all_df, default_view, year_value):
     """بطاقة كشف حساب وفواتير وإجمالي كميات ومديونية العملاء، بفترة مرنة قابلة للتغيير."""
     xlsx_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -1616,8 +1765,8 @@ def render_customer_statement(all_df, default_view, year_value):
             f"  ·  💳 مديونية العملاء: {num(customers['Debt_All'].sum())}"
         )
 
-        tab_sum, tab_cust, tab_credit = st.tabs(
-            ["👥 ملخص العملاء", "🧾 كشف حساب عميل", "💳 أرصدة العملاء الآجل"]
+        tab_sum, tab_cust, tab_credit, tab_shukran = st.tabs(
+            ["👥 ملخص العملاء", "🧾 كشف حساب عميل", "💳 أرصدة العملاء الآجل", "🎫 Shukran App barcode"]
         )
 
         # ---------- ملخص العملاء ----------
@@ -1834,6 +1983,38 @@ def render_customer_statement(all_df, default_view, year_value):
                     key="dl_credit_balances",
                 )
                 st.caption(f"ℹ️ الأرصدة محسوبة من كل الفترات بغض النظر عن فلتر التاريخ. المهلة {CREDIT_MAX_DAYS} يوماً من تاريخ الفاتورة.")
+
+        # ---------- باركود Shukran App (العمود AJ) ----------
+        with tab_shukran:
+            coded = customers_all[customers_all["Shukran_Code"].notna()].copy()
+            if coded.empty:
+                st.info("لا توجد أكواد شكران في العمود AJ من شيت Data.")
+            else:
+                coded = coded.sort_values("Customer_Name")
+                sk_labels = {}
+                for row in coded.itertuples():
+                    no = row.Customer_No
+                    nm = str(row.Customer_Name)
+                    sk_labels[row.Customer_Key] = f"{nm} — {no}" if pd.notna(no) and str(no) != nm else nm
+                st.caption(f"🎫 {len(coded):,} عميل لديه كود شكران (من كل الفترات).")
+                sk_key = st.selectbox(
+                    "🔎 اختر العميل (اكتب للبحث):",
+                    list(sk_labels.keys()),
+                    format_func=lambda k: sk_labels[k],
+                    key="shukran_customer",
+                )
+                sk = coded[coded["Customer_Key"] == sk_key].iloc[0]
+                sk_no = "—" if pd.isna(sk["Customer_No"]) else str(sk["Customer_No"])
+                sk_code = str(sk["Shukran_Code"])
+                sk_safe = re.sub(r"[^\w\-]+", "_", str(sk["Customer_Name"])).strip("_")[:40] or "customer"
+                try:
+                    components.html(
+                        shukran_card_html(sk["Customer_Name"], sk_no, sk_code, f"Shukran_{sk_safe}_{sk_code}.png"),
+                        height=560,
+                        scrolling=False,
+                    )
+                except ValueError:
+                    st.warning(f"⚠️ الكود «{sk_code}» يحتوي رموزاً لا يدعمها Code 128، تعذّر إنشاء الباركود.")
 
 
 
@@ -2176,188 +2357,3 @@ with daily_col:
                     max_d = dy_filtered["Date_Only"].max()
 
                 is_holiday = (month in HOLIDAY_MONTHS) or (
-                    selected_month_number < int(year_daily["Month_Num"].max())
-                )
-
-                filter_mode = st.radio(
-                    "طريقة العرض:",
-                    ["الشهر كاملاً", "تاريخ محدد", "نطاق تاريخي"],
-                    horizontal=True,
-                    key="daily_filter_mode"
-                )
-
-                daily_view = dy_filtered.copy()
-
-                if filter_mode == "تاريخ محدد":
-                    selected_date = st.date_input(
-                        "اختر اليوم المطلوب:",
-                        value=max_d,
-                        min_value=year_min,
-                        max_value=year_max,
-                        key=f"daily_single_date_{year}_{month}"
-                    )
-                    if selected_date:
-                        daily_view = year_daily[year_daily["Date_Only"] == selected_date]
-
-                elif filter_mode == "نطاق تاريخي":
-                    presets = ["مخصص", "آخر 7 أيام", "آخر 30 يوماً", "الشهر المحدد", "السنة كاملة"]
-                    preset = st.selectbox(
-                        "اختصار سريع:",
-                        presets,
-                        key=f"daily_preset_{year}_{month}"
-                    )
-
-                    if preset == "آخر 7 أيام":
-                        start_d, end_d = max(year_min, year_max - timedelta(days=6)), year_max
-                    elif preset == "آخر 30 يوماً":
-                        start_d, end_d = max(year_min, year_max - timedelta(days=29)), year_max
-                    elif preset == "الشهر المحدد":
-                        start_d, end_d = min_d, max_d
-                    elif preset == "السنة كاملة":
-                        start_d, end_d = year_min, year_max
-                    else:
-                        date_range = st.date_input(
-                            "اختر نطاق التواريخ:",
-                            value=(min_d, max_d),
-                            min_value=year_min,
-                            max_value=year_max,
-                            key=f"daily_date_range_{year}_{month}"
-                        )
-                        if isinstance(date_range, (tuple, list)) and len(date_range) == 2:
-                            start_d, end_d = date_range
-                        else:
-                            start_d, end_d = min_d, max_d
-                            st.caption("ℹ️ اختر تاريخ النهاية لإكمال النطاق.")
-
-                    daily_view = year_daily[
-                        (year_daily["Date_Only"] >= start_d) &
-                        (year_daily["Date_Only"] <= end_d)
-                    ]
-                    st.caption(f"📆 {start_d} ← {end_d}")
-
-                if not daily_view.empty:
-                    grouped_daily = (
-                        daily_view.groupby("Date_Only", as_index=False)
-                        .agg(
-                            Sales_Count=("Amount", lambda s: s.notna().sum()),
-                            Total_I_Sum=("Total_I", lambda s: s.sum(min_count=1)),
-                            Customer_Count=("Customer_No", "nunique"),
-                            Total_Amount=("Amount", lambda s: s.sum(min_count=1))
-                        )
-                        .sort_values("Date_Only", ascending=False)
-                    )
-
-                    display_daily = grouped_daily.rename(
-                        columns={
-                            "Date_Only": "التاريخ",
-                            "Sales_Count": t["sales_count"],
-                            "Total_I_Sum": t["total_i"],
-                            "Customer_Count": t["customer_count"],
-                            "Total_Amount": t["total_amount"]
-                        }
-                    )
-
-                    format_dict = {
-                        t["total_i"]: "{:,.2f}",
-                        t["total_amount"]: "{:,.2f}"
-                    }
-
-                    st.dataframe(
-                        display_daily.style.format(format_dict, na_rep="—"),
-                        use_container_width=True,
-                        hide_index=True,
-                        height=260
-                    )
-
-                    with totals_slot:
-                        with st.container(key="card_daily_totals"):
-                            st.markdown(f"#### 📊 {t['daily_total']}")
-                            m1, m2, m3 = st.columns(3)
-                            m1.metric(t["active_customers"], f"{daily_view['Customer_No'].nunique():,}")
-                            m2.metric(t["total_i"], num(daily_view["Total_I"].sum(min_count=1)))
-                            m3.metric(t["total_amount"], num(daily_view["Amount"].sum(min_count=1)))
-
-                    statement_view = daily_view
-                else:
-                    month_label = MONTH_AR[month] if lang == "ar" else month
-                    if filter_mode == "الشهر كاملاً" and is_holiday:
-                        st.markdown(
-                            f'<div class="holiday-badge">🏖️ ({t["holiday"]}) — {t["holiday_note"]} {month_label}</div>',
-                            unsafe_allow_html=True
-                        )
-                    elif filter_mode == "الشهر كاملاً":
-                        st.info(f"{t['no_sales_yet']} {month_label}.")
-                    else:
-                        st.warning("لا توجد مبيعات في التاريخ المحدد.")
-
-    # كشف حساب وفواتير وإجمالي كميات العملاء (تحت الجدول اليومي)
-    if statement_view is not None and not statement_view.empty:
-        render_customer_statement(daily_df, statement_view, year)
-
-
-# =========================================================
-# 21. ANALYTICAL TABLES
-# =========================================================
-
-st.markdown("<hr>", unsafe_allow_html=True)
-st.markdown(f'<div class="section-heading">📋 {t["tables"]}</div>', unsafe_allow_html=True)
-
-tab1, tab2, tab3 = st.tabs([
-    "📅 Monthly Summary",
-    "🛢️ Products Breakdown",
-    "📆 Yearly Comparison"
-])
-
-with tab1:
-    st.dataframe(
-        style_table(month_summary.drop(columns=["Month_Num"], errors="ignore")),
-        use_container_width=True,
-        hide_index=True
-    )
-
-with tab2:
-    product_quarter = summary(filtered, ["Product", "Quarter"])
-    st.dataframe(
-        style_table(product_quarter),
-        use_container_width=True,
-        hide_index=True
-    )
-
-with tab3:
-    yearly = summary(data[data.Product.isin(chosen_products)], ["Year"])
-    st.dataframe(
-        style_table(yearly),
-        use_container_width=True,
-        hide_index=True
-    )
-
-
-# =========================================================
-# 22. EXPORT REPORTS
-# =========================================================
-
-st.markdown(f'<div class="section-heading">📥 {t["export"]}</div>', unsafe_allow_html=True)
-
-exports = {
-    "Monthly_Summary": month_summary.drop(columns=["Month_Num"], errors="ignore"),
-    "Half_Year": summary(year_data, ["Half"]),
-    "Quarterly": summary(year_data, ["Quarter"]),
-    "Products": product_summary,
-    "Product_Quarter": product_quarter,
-    "Yearly": yearly,
-}
-
-if daily_df is not None and not daily_df.empty:
-    daily_export = daily_df.copy()
-    daily_export["Parsed_Date"] = daily_export["Parsed_Date"].dt.strftime("%Y-%m-%d")
-    exports["Daily_Sales"] = daily_export
-
-st.download_button(
-    "📥 " + t["download"],
-    data=excel_bytes(exports),
-    file_name=f"Sales_Analysis_{year}.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    use_container_width=True
-)
-
-st.markdown(f'<div class="app-footer">{t["footer"]}</div>', unsafe_allow_html=True)
